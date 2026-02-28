@@ -1,7 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { Laminar, observe } from "@lmnr-ai/lmnr";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { WebClient } from "@slack/web-api";
 import { env } from "@/env";
+import { patchLaminarAnthropic } from "@/lib/laminar";
 import { DEFAULT_SLACK_MODEL } from "../../../constants";
 import type { AgentAction } from "../slack-blocks";
 import type { SlackImageAsset } from "../slack-image-assets";
@@ -123,7 +125,19 @@ export interface SlackAgentResult {
 	actions: AgentAction[];
 }
 
+type ObserveOptions = Parameters<typeof observe>[0];
+
+function runObserved<T>(
+	enabled: boolean,
+	options: ObserveOptions,
+	fn: () => Promise<T>,
+): Promise<T> {
+	if (!enabled) return fn();
+	return observe(options, fn);
+}
+
 export async function formatErrorForSlack(error: unknown): Promise<string> {
+	patchLaminarAnthropic();
 	const message =
 		error instanceof Error ? error.message : "Unknown error occurred";
 	try {
@@ -462,51 +476,89 @@ function buildUserMessageContent({
 export async function runSlackAgent(
 	params: RunSlackAgentParams,
 ): Promise<SlackAgentResult> {
-	const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+	const laminarEnabled = patchLaminarAnthropic();
 	const actions: AgentAction[] = [];
+	const defaultModel = params.model ?? DEFAULT_SLACK_MODEL;
+	const sessionId = `${params.channelId}:${params.threadTs}`;
 
-	let supersetMcp: Client | null = null;
-	let cleanupSuperset: (() => Promise<void>) | null = null;
+	const runTurn = async (): Promise<SlackAgentResult> => {
+		const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+		let cleanupSuperset: (() => Promise<void>) | null = null;
 
-	try {
-		const [threadContext, supersetMcpResult] = await Promise.all([
-			fetchThreadContext({
-				token: params.slackToken,
-				channelId: params.channelId,
-				threadTs: params.threadTs,
-			}),
-			createSupersetMcpClient({
-				organizationId: params.organizationId,
-				userId: params.userId,
-			}),
-		]);
+		try {
+			const [threadContext, supersetMcpResult] = await Promise.all([
+				runObserved(
+					laminarEnabled,
+					{
+						name: "slack_agent.fetch_thread_context",
+						ignoreInput: true,
+						ignoreOutput: true,
+						metadata: {
+							channelId: params.channelId,
+							threadTs: params.threadTs,
+						},
+					},
+					async () =>
+						fetchThreadContext({
+							token: params.slackToken,
+							channelId: params.channelId,
+							threadTs: params.threadTs,
+						}),
+				),
+				runObserved(
+					laminarEnabled,
+					{
+						name: "slack_agent.connect_superset_mcp",
+						ignoreInput: true,
+						metadata: { organizationId: params.organizationId },
+					},
+					async () =>
+						createSupersetMcpClient({
+							organizationId: params.organizationId,
+							userId: params.userId,
+						}),
+				),
+			]);
 
-		supersetMcp = supersetMcpResult.client;
-		cleanupSuperset = supersetMcpResult.cleanup;
+			const activeSupersetMcp = supersetMcpResult.client;
+			cleanupSuperset = supersetMcpResult.cleanup;
 
-		const [supersetToolsResult, agentContext] = await Promise.all([
-			supersetMcp.listTools(),
-			fetchAgentContext({
-				mcpClient: supersetMcp,
-				userId: params.userId,
-			}),
-		]);
+			const [supersetToolsResult, agentContext] = await Promise.all([
+				runObserved(
+					laminarEnabled,
+					{ name: "slack_agent.list_superset_tools", ignoreInput: true },
+					async () => activeSupersetMcp.listTools(),
+				),
+				runObserved(
+					laminarEnabled,
+					{
+						name: "slack_agent.fetch_agent_context",
+						ignoreInput: true,
+						ignoreOutput: true,
+					},
+					async () =>
+						fetchAgentContext({
+							mcpClient: activeSupersetMcp,
+							userId: params.userId,
+						}),
+				),
+			]);
 
-		const supersetTools = supersetToolsResult.tools
-			.filter((t) => !DENIED_SUPERSET_TOOLS.has(t.name))
-			.map((t) => mcpToolToAnthropicTool(t, "superset"));
+			const supersetTools = supersetToolsResult.tools
+				.filter((t) => !DENIED_SUPERSET_TOOLS.has(t.name))
+				.map((t) => mcpToolToAnthropicTool(t, "superset"));
 
-		const tools: Anthropic.Messages.ToolUnion[] = [
-			...supersetTools,
-			SLACK_GET_CHANNEL_HISTORY_TOOL,
-			{
-				type: "web_search_20250305" as const,
-				name: "web_search" as const,
-				max_uses: 5,
-			},
-		];
+			const tools: Anthropic.Messages.ToolUnion[] = [
+				...supersetTools,
+				SLACK_GET_CHANNEL_HISTORY_TOOL,
+				{
+					type: "web_search_20250305" as const,
+					name: "web_search" as const,
+					max_uses: 5,
+				},
+			];
 
-		const contextualSystem = `${SYSTEM_PROMPT}
+			const contextualSystem = `${SYSTEM_PROMPT}
 
 Current context:
 - Slack Channel: ${params.channelId}
@@ -515,169 +567,217 @@ Current context:
 
 ${agentContext}`;
 
-		const userContent = buildUserMessageContent({
-			prompt: params.prompt,
-			threadContext,
-			images: params.images,
-		});
-
-		const messages: Anthropic.MessageParam[] = [
-			{
-				role: "user",
-				content: userContent,
-			},
-		];
-
-		let response = await anthropic.messages.create({
-			model: params.model ?? DEFAULT_SLACK_MODEL,
-			max_tokens: 2048,
-			system: contextualSystem,
-			tools,
-			messages,
-		});
-
-		const MAX_TOOL_ITERATIONS = 10;
-		let iterations = 0;
-
-		while (
-			(response.stop_reason === "tool_use" ||
-				response.stop_reason === "pause_turn") &&
-			iterations < MAX_TOOL_ITERATIONS
-		) {
-			iterations++;
-
-			// pause_turn: server-side tool (web search) paused a long-running turn
-			if (response.stop_reason === "pause_turn") {
-				try {
-					await params.onProgress?.("Searching the web...");
-				} catch {
-					// Non-critical
-				}
-				messages.push({ role: "assistant", content: response.content });
-				response = await anthropic.messages.create({
-					model: params.model ?? DEFAULT_SLACK_MODEL,
-					max_tokens: 2048,
-					system: contextualSystem,
-					tools,
-					messages,
-				});
-				continue;
-			}
-
-			// tool_use: handle client-side tools (MCP + slack_get_channel_history)
-			const toolUseBlocks = response.content.filter(
-				(b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
-			);
-
-			const toolResults: Anthropic.ToolResultBlockParam[] = [];
-
-			for (const toolUse of toolUseBlocks) {
-				try {
-					const { toolName: rawToolName } = parseToolName(toolUse.name);
-					const progressStatus =
-						TOOL_PROGRESS_STATUS[toolUse.name] ??
-						TOOL_PROGRESS_STATUS[rawToolName] ??
-						"Working...";
-
-					try {
-						await params.onProgress?.(progressStatus);
-					} catch {
-						// Non-critical: don't fail the agent if progress update fails
-					}
-
-					let resultContent: string;
-
-					if (toolUse.name === "slack_get_channel_history") {
-						const input = toolUse.input as { limit?: number };
-						resultContent = await handleGetChannelHistory({
-							token: params.slackToken,
-							channelId: params.channelId,
-							limit: input.limit,
-						});
-					} else {
-						const { prefix, toolName } = parseToolName(toolUse.name);
-
-						if (prefix !== "superset" || !supersetMcp) {
-							toolResults.push({
-								type: "tool_result",
-								tool_use_id: toolUse.id,
-								content: JSON.stringify({
-									error: `Unknown tool: ${toolUse.name}`,
-								}),
-								is_error: true,
-							});
-							continue;
-						}
-
-						const result = await supersetMcp.callTool({
-							name: toolName,
-							arguments: toolUse.input as Record<string, unknown>,
-						});
-
-						resultContent = JSON.stringify(result.content);
-
-						const action = getActionFromToolResult(toolName, result);
-						if (action) {
-							actions.push(action);
-						}
-					}
-
-					toolResults.push({
-						type: "tool_result",
-						tool_use_id: toolUse.id,
-						content: resultContent,
-					});
-				} catch (error) {
-					console.error(
-						"[slack-agent] Tool execution error:",
-						toolUse.name,
-						error,
-					);
-					toolResults.push({
-						type: "tool_result",
-						tool_use_id: toolUse.id,
-						content: JSON.stringify({
-							error:
-								error instanceof Error
-									? error.message
-									: "Tool execution failed",
-						}),
-						is_error: true,
-					});
-				}
-			}
-
-			messages.push({
-				role: "assistant",
-				content: stripServerToolBlocks(response.content),
+			const userContent = buildUserMessageContent({
+				prompt: params.prompt,
+				threadContext,
+				images: params.images,
 			});
-			messages.push({ role: "user", content: toolResults });
 
-			response = await anthropic.messages.create({
-				model: params.model ?? DEFAULT_SLACK_MODEL,
+			const messages: Anthropic.MessageParam[] = [
+				{
+					role: "user",
+					content: userContent,
+				},
+			];
+
+			let response = await anthropic.messages.create({
+				model: defaultModel,
 				max_tokens: 2048,
 				system: contextualSystem,
 				tools,
 				messages,
 			});
-		}
 
-		// Use the last text block — server-side tools like web_search produce
-		// multiple text blocks (preamble + synthesis) and we want the final one.
-		const textBlocks = response.content.filter(
-			(b): b is Anthropic.TextBlock => b.type === "text",
-		);
-		const textBlock = textBlocks.at(-1);
+			const MAX_TOOL_ITERATIONS = 10;
+			let iterations = 0;
 
-		return {
-			text: textBlock?.text ?? "Done!",
-			actions,
-		};
-	} finally {
-		if (cleanupSuperset) {
-			try {
-				await cleanupSuperset();
-			} catch {}
+			while (
+				(response.stop_reason === "tool_use" ||
+					response.stop_reason === "pause_turn") &&
+				iterations < MAX_TOOL_ITERATIONS
+			) {
+				iterations++;
+
+				// pause_turn: server-side tool (web search) paused a long-running turn
+				if (response.stop_reason === "pause_turn") {
+					try {
+						await params.onProgress?.("Searching the web...");
+					} catch {
+						// Non-critical
+					}
+					messages.push({ role: "assistant", content: response.content });
+					response = await anthropic.messages.create({
+						model: defaultModel,
+						max_tokens: 2048,
+						system: contextualSystem,
+						tools,
+						messages,
+					});
+					continue;
+				}
+
+				// tool_use: handle client-side tools (MCP + slack_get_channel_history)
+				const toolUseBlocks = response.content.filter(
+					(b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
+				);
+
+				const toolResults: Anthropic.ToolResultBlockParam[] = [];
+
+				for (const toolUse of toolUseBlocks) {
+					try {
+						const { toolName: rawToolName } = parseToolName(toolUse.name);
+						const progressStatus =
+							TOOL_PROGRESS_STATUS[toolUse.name] ??
+							TOOL_PROGRESS_STATUS[rawToolName] ??
+							"Working...";
+
+						try {
+							await params.onProgress?.(progressStatus);
+						} catch {
+							// Non-critical: don't fail the agent if progress update fails
+						}
+
+						let resultContent: string;
+
+						if (toolUse.name === "slack_get_channel_history") {
+							const input = toolUse.input as { limit?: number };
+							resultContent = await runObserved(
+								laminarEnabled,
+								{
+									name: "slack_agent.tool.slack_get_channel_history",
+									ignoreInput: true,
+									ignoreOutput: true,
+								},
+								async () =>
+									handleGetChannelHistory({
+										token: params.slackToken,
+										channelId: params.channelId,
+										limit: input.limit,
+									}),
+							);
+						} else {
+							const { prefix, toolName } = parseToolName(toolUse.name);
+
+							if (prefix !== "superset") {
+								toolResults.push({
+									type: "tool_result",
+									tool_use_id: toolUse.id,
+									content: JSON.stringify({
+										error: `Unknown tool: ${toolUse.name}`,
+									}),
+									is_error: true,
+								});
+								continue;
+							}
+
+							const result = await runObserved(
+								laminarEnabled,
+								{
+									name: `slack_agent.tool.${toolName}`,
+									ignoreInput: true,
+									ignoreOutput: true,
+									metadata: { toolName },
+								},
+								async () =>
+									activeSupersetMcp.callTool({
+										name: toolName,
+										arguments: toolUse.input as Record<string, unknown>,
+									}),
+							);
+
+							resultContent = JSON.stringify(result.content);
+
+							const action = getActionFromToolResult(toolName, result);
+							if (action) {
+								actions.push(action);
+							}
+						}
+
+						toolResults.push({
+							type: "tool_result",
+							tool_use_id: toolUse.id,
+							content: resultContent,
+						});
+					} catch (error) {
+						console.error(
+							"[slack-agent] Tool execution error:",
+							toolUse.name,
+							error,
+						);
+						toolResults.push({
+							type: "tool_result",
+							tool_use_id: toolUse.id,
+							content: JSON.stringify({
+								error:
+									error instanceof Error
+										? error.message
+										: "Tool execution failed",
+							}),
+							is_error: true,
+						});
+					}
+				}
+
+				messages.push({
+					role: "assistant",
+					content: stripServerToolBlocks(response.content),
+				});
+				messages.push({ role: "user", content: toolResults });
+
+				response = await anthropic.messages.create({
+					model: defaultModel,
+					max_tokens: 2048,
+					system: contextualSystem,
+					tools,
+					messages,
+				});
+			}
+
+			// Use the last text block — server-side tools like web_search produce
+			// multiple text blocks (preamble + synthesis) and we want the final one.
+			const textBlocks = response.content.filter(
+				(b): b is Anthropic.TextBlock => b.type === "text",
+			);
+			const textBlock = textBlocks.at(-1);
+
+			return {
+				text: textBlock?.text ?? "Done!",
+				actions,
+			};
+		} finally {
+			if (cleanupSuperset) {
+				try {
+					await cleanupSuperset();
+				} catch {}
+			}
 		}
+	};
+
+	if (!laminarEnabled) {
+		return runTurn();
 	}
+
+	return observe(
+		{
+			name: "slack_agent.handle_turn",
+			userId: params.userId,
+			sessionId,
+			tags: ["agent", "slack"],
+			metadata: {
+				channelId: params.channelId,
+				threadTs: params.threadTs,
+				model: defaultModel,
+				organizationId: params.organizationId,
+			},
+		},
+		async () => {
+			Laminar.setTraceMetadata({
+				channelId: params.channelId,
+				organizationId: params.organizationId,
+				surface: "slack",
+				threadTs: params.threadTs,
+			});
+			return runTurn();
+		},
+	);
 }

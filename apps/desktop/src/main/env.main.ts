@@ -23,6 +23,7 @@ export const env = createEnv({
 		NEXT_PUBLIC_POSTHOG_KEY: z.string().optional(),
 		NEXT_PUBLIC_POSTHOG_HOST: z.string().default("https://us.i.posthog.com"),
 		SENTRY_DSN_DESKTOP: z.string().optional(),
+		LMNR_PROJECT_API_KEY: z.string().optional(),
 	},
 
 	runtimeEnv: {
@@ -37,6 +38,7 @@ export const env = createEnv({
 		NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY,
 		NEXT_PUBLIC_POSTHOG_HOST: process.env.NEXT_PUBLIC_POSTHOG_HOST,
 		SENTRY_DSN_DESKTOP: process.env.SENTRY_DSN_DESKTOP,
+		LMNR_PROJECT_API_KEY: process.env.LMNR_PROJECT_API_KEY,
 	},
 	emptyStringAsUndefined: true,
 	// Only allow skipping validation in development (never in production)

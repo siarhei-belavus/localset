@@ -30,6 +30,7 @@ export const env = createEnv({
 		SLACK_CLIENT_SECRET: z.string().min(1),
 		SLACK_SIGNING_SECRET: z.string(),
 		ANTHROPIC_API_KEY: z.string(),
+		LMNR_PROJECT_API_KEY: z.string().optional(),
 		QSTASH_TOKEN: z.string().min(1),
 		QSTASH_CURRENT_SIGNING_KEY: z.string().min(1),
 		QSTASH_NEXT_SIGNING_KEY: z.string().min(1),

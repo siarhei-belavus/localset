@@ -5,6 +5,10 @@ import { createMastraCode } from "mastracode";
 import superjson from "superjson";
 import { searchFiles } from "./utils/file-search";
 import {
+	initializeLaminarForChatMastra,
+	observeChatMastra,
+} from "./utils/laminar";
+import {
 	authenticateRuntimeMcpServer,
 	destroyRuntime,
 	getRuntimeMcpOverview,
@@ -43,6 +47,7 @@ export class ChatMastraService {
 	private readonly apiClient: ReturnType<typeof createTRPCClient<AppRouter>>;
 
 	constructor(readonly opts: ChatMastraServiceOptions) {
+		initializeLaminarForChatMastra();
 		this.apiClient = createTRPCClient<AppRouter>({
 			links: [
 				httpBatchLink({
@@ -203,22 +208,63 @@ export class ChatMastraService {
 				sendMessage: t.procedure
 					.input(sendMessageInput)
 					.mutation(async ({ input }) => {
-						const runtime = await this.getOrCreateRuntime(
-							input.sessionId,
-							input.cwd,
-						);
-						runtime.lastErrorMessage = null;
-						const userMessage =
-							input.payload.content.trim() || "[non-text message]";
-						await onUserPromptSubmit(runtime, userMessage);
 						const selectedModel = input.metadata?.model?.trim();
-						if (selectedModel) {
-							await runtime.harness.switchModel({
-								modelId: selectedModel,
-								scope: "thread",
-							});
-						}
-						return runtime.harness.sendMessage(input.payload);
+						return observeChatMastra(
+							{
+								name: "chat_mastra.handle_turn",
+								sessionId: input.sessionId,
+								metadata: {
+									cwd: input.cwd ?? process.cwd(),
+									model: selectedModel ?? null,
+									surface: "desktop",
+								},
+								tags: ["agent", "chat-mastra"],
+							},
+							async () => {
+								const runtime = await observeChatMastra(
+									{
+										name: "chat_mastra.get_or_create_runtime",
+										ignoreInput: true,
+										ignoreOutput: true,
+									},
+									async () =>
+										this.getOrCreateRuntime(input.sessionId, input.cwd),
+								);
+								runtime.lastErrorMessage = null;
+								const userMessage =
+									input.payload.content.trim() || "[non-text message]";
+								await observeChatMastra(
+									{
+										name: "chat_mastra.user_prompt_submit",
+										ignoreInput: true,
+										ignoreOutput: true,
+									},
+									async () => onUserPromptSubmit(runtime, userMessage),
+								);
+								if (selectedModel) {
+									await observeChatMastra(
+										{
+											name: "chat_mastra.switch_model",
+											ignoreInput: true,
+											metadata: { model: selectedModel },
+										},
+										async () =>
+											runtime.harness.switchModel({
+												modelId: selectedModel,
+												scope: "thread",
+											}),
+									);
+								}
+								return observeChatMastra(
+									{
+										name: "chat_mastra.send_message",
+										ignoreInput: true,
+										ignoreOutput: true,
+									},
+									async () => runtime.harness.sendMessage(input.payload),
+								);
+							},
+						);
 					}),
 
 				stop: t.procedure.input(sessionIdInput).mutation(async ({ input }) => {

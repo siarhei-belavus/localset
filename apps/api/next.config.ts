@@ -14,6 +14,7 @@ if (process.env.NODE_ENV !== "production") {
 const config: NextConfig = {
 	reactCompiler: true,
 	typescript: { ignoreBuildErrors: true },
+	serverExternalPackages: ["@lmnr-ai/lmnr"],
 
 	images: {
 		remotePatterns: [

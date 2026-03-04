@@ -4,6 +4,10 @@ import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HiCheckCircle } from "react-icons/hi2";
 import { useCollections } from "renderer/routes/_authenticated/providers/CollectionsProvider";
+import {
+	useOpenStartWorkingModal,
+	useStartWorkingModalOpen,
+} from "renderer/stores/start-working-modal";
 import { useTasksFilterStore } from "../../stores/tasks-filter-state";
 import { LinearCTA } from "./components/LinearCTA";
 import { TasksTableView } from "./components/TasksTableView";
@@ -23,6 +27,8 @@ export function TasksView({
 }: TasksViewProps) {
 	const navigate = useNavigate();
 	const collections = useCollections();
+	const openStartWorkingModal = useOpenStartWorkingModal();
+	const isModalOpen = useStartWorkingModalOpen();
 	const currentTab: TabValue = initialTab ?? "all";
 	const [searchQuery, setSearchQuery] = useState(initialSearch ?? "");
 	const assigneeFilter = initialAssignee ?? null;
@@ -105,6 +111,20 @@ export function TasksView({
 			.map((row) => row.original);
 	}, [rowSelection, table]);
 
+	// Clear row selection when modal transitions from open → closed
+	const prevModalOpen = useRef(isModalOpen);
+	useEffect(() => {
+		if (prevModalOpen.current && !isModalOpen) {
+			setRowSelection({});
+		}
+		prevModalOpen.current = isModalOpen;
+	}, [isModalOpen, setRowSelection]);
+
+	const handleStartWorking = () => {
+		if (selectedTasks.length === 0) return;
+		openStartWorkingModal(selectedTasks);
+	};
+
 	const handleTabChange = (tab: TabValue) => {
 		const search: Record<string, string> = {};
 		if (tab !== "all") search.tab = tab;
@@ -163,6 +183,7 @@ export function TasksView({
 					assigneeFilter={assigneeFilter}
 					onAssigneeFilterChange={handleAssigneeFilterChange}
 					selectedCount={selectedTasks.length}
+					onStartWorking={handleStartWorking}
 					onClearSelection={handleClearSelection}
 				/>
 			)}

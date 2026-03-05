@@ -1,3 +1,5 @@
+import { isAbsolute, normalize, relative, resolve } from "pathe";
+
 export function getWorkspaceToolFilePath({
 	toolName,
 	args,
@@ -26,37 +28,24 @@ export function normalizeWorkspaceFilePath({
 	filePath: string;
 	workspaceRoot?: string;
 }): string | null {
-	let normalizedPath = filePath.trim();
+	let normalizedPath = stripFileUri(filePath.trim());
 	if (!normalizedPath) return null;
 
-	if (normalizedPath.startsWith("file://")) {
-		const rawPath = normalizedPath.slice(7);
-		try {
-			normalizedPath = decodeURIComponent(rawPath);
-		} catch {
-			normalizedPath = rawPath;
+	normalizedPath = normalize(normalizedPath);
+
+	if (workspaceRoot) {
+		const root = normalize(workspaceRoot);
+		if (normalizedPath === root) return null;
+		if (isAbsolute(normalizedPath)) {
+			const rel = relative(root, normalizedPath);
+			// relative() returns a path starting with ".." if outside the root
+			if (rel.startsWith("..")) return null;
+			normalizedPath = rel;
 		}
-	}
-
-	normalizedPath = normalizedPath.replaceAll("\\", "/");
-
-	const normalizedRoot = workspaceRoot
-		? workspaceRoot.replaceAll("\\", "/").replace(/\/+$/, "")
-		: "";
-
-	if (normalizedRoot) {
-		if (normalizedPath === normalizedRoot) return null;
-		if (normalizedPath.startsWith(`${normalizedRoot}/`)) {
-			normalizedPath = normalizedPath.slice(normalizedRoot.length + 1);
-		}
-	}
-
-	while (normalizedPath.startsWith("./")) {
-		normalizedPath = normalizedPath.slice(2);
 	}
 
 	if (!normalizedPath || normalizedPath === ".") return null;
-	if (normalizedPath.startsWith("/")) return null;
+	if (isAbsolute(normalizedPath)) return null;
 
 	return normalizedPath;
 }
@@ -73,24 +62,8 @@ export function resolveToAbsolutePath({
 	filePath: string;
 	workspaceRoot?: string;
 }): string | null {
-	let normalizedPath = filePath.trim();
+	const normalizedPath = stripFileUri(filePath.trim());
 	if (!normalizedPath) return null;
-
-	if (normalizedPath.startsWith("file://")) {
-		const rawPath = normalizedPath.slice(7);
-		try {
-			normalizedPath = decodeURIComponent(rawPath);
-		} catch {
-			normalizedPath = rawPath;
-		}
-	}
-
-	normalizedPath = normalizedPath.replaceAll("\\", "/");
-
-	// Already absolute
-	if (normalizedPath.startsWith("/")) {
-		return normalizedPath;
-	}
 
 	// Remote URL — pass through
 	if (
@@ -100,21 +73,29 @@ export function resolveToAbsolutePath({
 		return normalizedPath;
 	}
 
-	// Relative path — resolve against workspace root
-	const normalizedRoot = workspaceRoot
-		? workspaceRoot.replaceAll("\\", "/").replace(/\/+$/, "")
-		: "";
-
-	if (!normalizedRoot) return null;
-
-	// Strip leading ./
-	while (normalizedPath.startsWith("./")) {
-		normalizedPath = normalizedPath.slice(2);
+	// Already absolute — normalize and return
+	if (isAbsolute(normalizedPath)) {
+		return normalize(normalizedPath);
 	}
 
-	if (!normalizedPath || normalizedPath === ".") return null;
+	// Relative path — resolve against workspace root
+	if (!workspaceRoot) return null;
 
-	return `${normalizedRoot}/${normalizedPath}`;
+	const resolved = resolve(workspaceRoot, normalizedPath);
+	// Don't return the workspace root itself
+	if (resolved === normalize(workspaceRoot)) return null;
+
+	return resolved;
+}
+
+function stripFileUri(path: string): string {
+	if (!path.startsWith("file://")) return path;
+	const rawPath = path.slice(7);
+	try {
+		return decodeURIComponent(rawPath);
+	} catch {
+		return rawPath;
+	}
 }
 
 function toStringValue(value: unknown): string | null {

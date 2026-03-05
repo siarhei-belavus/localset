@@ -1,4 +1,5 @@
 import { toast } from "@superset/ui/sonner";
+import { resolve } from "pathe";
 import { useCallback } from "react";
 import { electronTrpc } from "renderer/lib/electron-trpc";
 import { electronTrpcClient as trpcClient } from "renderer/lib/trpc-client";
@@ -68,9 +69,7 @@ export function useFileLinkClick({
 				}
 
 				// Resolve relative paths to absolute using workspace cwd
-				const filePath = path.startsWith("/")
-					? path
-					: `${workspaceCwd}/${path}`;
+				const filePath = resolve(workspaceCwd, path);
 				addFileViewerPane(workspaceId, {
 					filePath,
 					line,

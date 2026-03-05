@@ -1,4 +1,5 @@
 import type * as Monaco from "monaco-editor";
+import { relative } from "pathe";
 import { type MutableRefObject, useCallback, useMemo, useRef } from "react";
 import { electronTrpc } from "renderer/lib/electron-trpc";
 import { useTabsStore } from "renderer/stores/tabs/store";
@@ -30,10 +31,9 @@ export function useFileSave({
 }: UseFileSaveParams) {
 	// Derive worktree-relative path for secureFs save operations
 	const relativeFilePath = useMemo(() => {
-		if (worktreePath && filePath.startsWith(`${worktreePath}/`)) {
-			return filePath.slice(worktreePath.length + 1);
-		}
-		return filePath;
+		if (!worktreePath) return filePath;
+		const rel = relative(worktreePath, filePath);
+		return rel.startsWith("..") ? filePath : rel;
 	}, [worktreePath, filePath]);
 	const savingFromRawRef = useRef(false);
 	const savingDiffContentRef = useRef<string | null>(null);

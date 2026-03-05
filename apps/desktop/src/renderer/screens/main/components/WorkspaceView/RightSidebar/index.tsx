@@ -2,6 +2,7 @@ import { Button } from "@superset/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@superset/ui/tooltip";
 import { cn } from "@superset/ui/utils";
 import { useParams } from "@tanstack/react-router";
+import { resolve } from "pathe";
 import { useCallback } from "react";
 import {
 	LuExpand,
@@ -130,9 +131,7 @@ export function RightSidebar() {
 	const handleFileOpenPane = useCallback(
 		(file: ChangedFile, category: ChangeCategory, commitHash?: string) => {
 			if (!workspaceId || !worktreePath) return;
-			const absolutePath = file.path.startsWith("/")
-				? file.path
-				: `${worktreePath}/${file.path}`;
+			const absolutePath = resolve(worktreePath, file.path);
 			addFileViewerPane(workspaceId, {
 				filePath: absolutePath,
 				diffCategory: category,

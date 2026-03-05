@@ -1,3 +1,4 @@
+import { relative } from "pathe";
 import { useEffect, useMemo } from "react";
 import { electronTrpc } from "renderer/lib/electron-trpc";
 import type { ChangeCategory } from "shared/changes-types";
@@ -24,11 +25,9 @@ function toRelativePath(
 	absolutePath: string,
 	worktreePath: string,
 ): string | null {
-	if (absolutePath === worktreePath) return ".";
-	if (absolutePath.startsWith(`${worktreePath}/`)) {
-		return absolutePath.slice(worktreePath.length + 1);
-	}
-	return null;
+	const rel = relative(worktreePath, absolutePath);
+	if (rel.startsWith("..") || rel === "") return null;
+	return rel;
 }
 
 export function useFileContent({

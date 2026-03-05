@@ -14,6 +14,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@superset/ui/tooltip";
 import { cn } from "@superset/ui/utils";
 import { useParams } from "@tanstack/react-router";
+import { dirname } from "pathe";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LuChevronRight, LuFile, LuFolder, LuHouse } from "react-icons/lu";
 import { electronTrpc } from "renderer/lib/electron-trpc";
@@ -133,8 +134,7 @@ export function FilesView() {
 	const navigateToParent = useCallback(() => {
 		const current = effectiveRoot;
 		if (!current || current === "/") return;
-		const parent = current.replace(/\/[^/]+\/?$/, "") || "/";
-		setBrowseRoot(parent);
+		setBrowseRoot(dirname(current));
 	}, [effectiveRoot]);
 
 	const navigateHome = useCallback(() => {

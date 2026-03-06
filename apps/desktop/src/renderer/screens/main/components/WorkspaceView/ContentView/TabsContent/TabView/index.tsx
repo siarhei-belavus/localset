@@ -21,6 +21,7 @@ import {
 import { useTheme } from "renderer/stores/theme";
 import { BrowserPane } from "./BrowserPane";
 import { ChatMastraPane } from "./ChatMastraPane";
+import { MosaicSplitOverlay } from "./components";
 import { DevToolsPane } from "./DevToolsPane";
 import { FileViewerPane } from "./FileViewerPane";
 import { TabPane } from "./TabPane";
@@ -40,7 +41,8 @@ export function TabView({ tab }: TabViewProps) {
 	const setFocusedPane = useTabsStore((s) => s.setFocusedPane);
 	const movePaneToTab = useTabsStore((s) => s.movePaneToTab);
 	const movePaneToNewTab = useTabsStore((s) => s.movePaneToNewTab);
-	const hasAiChat = useFeatureFlagEnabled(FEATURE_FLAGS.AI_CHAT);
+	const hasAiChat =
+		import.meta.env.DEV || useFeatureFlagEnabled(FEATURE_FLAGS.AI_CHAT);
 	const allTabs = useTabsStore((s) => s.tabs);
 	const allPanes = useTabsStore((s) => s.panes);
 
@@ -284,23 +286,35 @@ export function TabView({ tab }: TabViewProps) {
 		],
 	);
 
+	const handleSplitLayoutChange = useCallback(
+		(newLayout: MosaicNode<string>) => {
+			updateTabLayout(tab.id, newLayout);
+		},
+		[tab.id, updateTabLayout],
+	);
+
 	// Tab will be removed by useEffect above
 	if (!cleanedLayout) {
 		return null;
 	}
 
 	return (
-		<div className="w-full h-full mosaic-container">
+		<div className="relative w-full h-full mosaic-container">
 			<Mosaic<string>
 				renderTile={renderPane}
 				value={cleanedLayout}
 				onChange={handleLayoutChange}
+				resize="DISABLED"
 				className={
 					activeTheme?.type === "light"
 						? "mosaic-theme-light"
 						: "mosaic-theme-dark"
 				}
 				dragAndDropManager={dragDropManager}
+			/>
+			<MosaicSplitOverlay
+				layout={cleanedLayout}
+				onLayoutChange={handleSplitLayoutChange}
 			/>
 		</div>
 	);

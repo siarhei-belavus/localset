@@ -130,6 +130,7 @@ export interface Pane {
 	tabId: string;
 	type: PaneType;
 	name: string;
+	userTitle?: string;
 	isNew?: boolean;
 	status?: PaneStatus;
 	initialCwd?: string;

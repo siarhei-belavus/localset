@@ -28,7 +28,7 @@ export function LinkedIssuePill({
 			role="button"
 			tabIndex={0}
 			title={title}
-			className="group relative flex h-8 cursor-pointer select-none items-center gap-1.5 rounded-md border border-border px-1.5 font-medium text-sm transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50"
+			className="group flex cursor-pointer items-center gap-2.5 rounded-md border border-border/50 bg-muted/60 px-3 py-2 text-sm transition-all select-none hover:bg-accent hover:ring-1 hover:ring-border active:scale-[0.98] dark:hover:bg-accent/50"
 			onClick={openTask}
 			onKeyDown={(e) => {
 				if (e.key === "Enter" || e.key === " ") {
@@ -36,13 +36,11 @@ export function LinkedIssuePill({
 				}
 			}}
 		>
-			<div className="relative size-5 shrink-0">
-				<div className="absolute inset-0 flex size-5 items-center justify-center overflow-hidden rounded transition-opacity group-hover:opacity-0">
-					<LinearIcon className="size-5 rounded" />
-				</div>
+			<div className="relative flex size-7 shrink-0 items-center justify-center rounded-md bg-foreground/10 p-0.5">
+				<LinearIcon className="size-5 rounded-sm transition-opacity group-hover:opacity-0" />
 				<Button
 					aria-label="Remove linked issue"
-					className="pointer-events-none absolute inset-0 size-5 cursor-pointer rounded p-0 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 [&>svg]:size-2.5"
+					className="pointer-events-none absolute inset-0 size-7 cursor-pointer rounded-md p-0 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 [&>svg]:size-3"
 					onClick={(e) => {
 						e.stopPropagation();
 						onRemove();
@@ -54,8 +52,16 @@ export function LinkedIssuePill({
 					<span className="sr-only">Remove</span>
 				</Button>
 			</div>
-			<span className="shrink-0 font-semibold">{slug}</span>
-			<span className="text-muted-foreground text-xs">LINEAR</span>
+			<div className="flex flex-col items-start leading-tight">
+				<span className="max-w-[180px] truncate font-medium">
+					{title || slug}
+				</span>
+				<div className="flex items-center gap-1.5 text-muted-foreground text-[10px] uppercase tracking-widest">
+					<span className="max-w-[80px] truncate">{slug}</span>
+					<span>·</span>
+					<span>Linear</span>
+				</div>
+			</div>
 		</div>
 	);
 }

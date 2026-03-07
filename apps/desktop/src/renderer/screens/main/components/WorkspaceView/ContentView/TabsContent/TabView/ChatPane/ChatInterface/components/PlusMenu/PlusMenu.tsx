@@ -34,7 +34,7 @@ export function PlusMenu({ onLinkIssue }: PlusMenuProps) {
 					Add attachment
 					<DropdownMenuShortcut>⌘U</DropdownMenuShortcut>
 				</DropdownMenuItem>
-				<DropdownMenuItem onSelect={onLinkIssue}>
+				<DropdownMenuItem onSelect={() => setTimeout(onLinkIssue, 100)}>
 					<SiLinear className="size-4" />
 					Link issue
 					<DropdownMenuShortcut>⌘I</DropdownMenuShortcut>

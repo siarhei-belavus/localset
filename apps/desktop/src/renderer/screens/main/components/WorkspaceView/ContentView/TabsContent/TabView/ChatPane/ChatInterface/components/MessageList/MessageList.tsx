@@ -11,6 +11,8 @@ import { FileIcon, FileTextIcon, ImageIcon } from "lucide-react";
 import { useCallback } from "react";
 import { HiMiniChatBubbleLeftRight } from "react-icons/hi2";
 import { useTabsStore } from "renderer/stores/tabs/store";
+import { parseUserMentions } from "../../../../ChatMastraPane/ChatMastraInterface/components/ChatMastraMessageList/components/UserMessage/utils/parseUserMentions";
+import { LinkedTaskChip } from "../../../../components/LinkedTaskChip";
 import type { InterruptedMessagePreview } from "../../types";
 import { MessagePartsRenderer } from "../MessagePartsRenderer";
 import { MessageScrollbackRail } from "./components/MessageScrollbackRail";
@@ -101,6 +103,21 @@ export function MessageList({
 								(p) => p.type === "file" && !p.mediaType.startsWith("image/"),
 							);
 
+							const mentionSegments = textContent
+								? parseUserMentions(textContent)
+								: [];
+							const taskMentions = mentionSegments.filter(
+								(s) => s.type === "task-mention",
+							);
+							const otherSegments = mentionSegments.filter(
+								(s) => s.type !== "task-mention",
+							);
+							const hasNonTaskContent = otherSegments.some(
+								(s) =>
+									(s.type === "text" && s.value.trim()) ||
+									s.type === "file-mention",
+							);
+
 							return (
 								<div
 									key={msg.id}
@@ -141,9 +158,49 @@ export function MessageList({
 											)}
 										</div>
 									)}
-									{textContent && (
-										<div className="max-w-[85%] rounded-2xl bg-muted px-4 py-2.5 text-sm text-foreground">
-											{textContent}
+									{taskMentions.length > 0 && workspaceId && (
+										<div className="flex max-w-[85%] flex-wrap justify-end gap-2">
+											{taskMentions.map((segment, segIdx) =>
+												segment.type === "task-mention" ? (
+													<LinkedTaskChip
+														key={`${msg.id}-task-${segIdx}`}
+														slug={segment.slug}
+														workspaceId={workspaceId}
+													/>
+												) : null,
+											)}
+										</div>
+									)}
+									{hasNonTaskContent && (
+										<div className="max-w-[85%] rounded-lg bg-muted px-4 py-2.5 text-sm text-foreground whitespace-pre-wrap">
+											{otherSegments.map((segment, segIdx) => {
+												if (segment.type === "text") {
+													return (
+														<span
+															key={`${msg.id}-seg-${segIdx}`}
+															className="whitespace-pre-wrap break-words"
+														>
+															{segment.value}
+														</span>
+													);
+												}
+												if (segment.type === "file-mention") {
+													return (
+														<span
+															key={`${msg.id}-seg-${segIdx}`}
+															className="mx-0.5 inline-flex items-center gap-0.5 rounded-md bg-primary/15 px-1.5 py-0.5 font-mono text-xs text-primary"
+														>
+															<span className="font-semibold text-primary">
+																@
+															</span>
+															<span className="text-primary/95">
+																{segment.relativePath}
+															</span>
+														</span>
+													);
+												}
+												return null;
+											})}
 										</div>
 									)}
 								</div>

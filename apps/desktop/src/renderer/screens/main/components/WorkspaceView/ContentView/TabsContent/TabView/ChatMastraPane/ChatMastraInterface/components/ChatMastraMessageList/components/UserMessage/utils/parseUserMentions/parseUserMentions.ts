@@ -4,10 +4,20 @@ const TRAILING_PUNCTUATION = /[.,!?;:)\]}]+$/;
 
 export type UserMentionSegment =
 	| { type: "text"; value: string }
-	| { type: "file-mention"; raw: string; relativePath: string };
+	| { type: "file-mention"; raw: string; relativePath: string }
+	| { type: "task-mention"; raw: string; slug: string };
 
 function trimTrailingPunctuation(value: string): string {
 	return value.replace(TRAILING_PUNCTUATION, "");
+}
+
+const TASK_MENTION_PREFIX = "task:";
+
+function isTaskMention(value: string): boolean {
+	return (
+		value.startsWith(TASK_MENTION_PREFIX) &&
+		value.length > TASK_MENTION_PREFIX.length
+	);
 }
 
 function isFileLikeMention(value: string): boolean {
@@ -31,7 +41,8 @@ export function parseUserMentions(text: string): UserMentionSegment[] {
 
 		const mentionStart = fullMatchIndex + boundary.length;
 		const normalizedToken = trimTrailingPunctuation(mentionToken);
-		if (!isFileLikeMention(normalizedToken)) {
+		const isTask = isTaskMention(normalizedToken);
+		if (!isTask && !isFileLikeMention(normalizedToken)) {
 			continue;
 		}
 
@@ -47,11 +58,19 @@ export function parseUserMentions(text: string): UserMentionSegment[] {
 				value: text.slice(cursor, mentionStart),
 			});
 		}
-		segments.push({
-			type: "file-mention",
-			raw: mentionText,
-			relativePath: normalizedToken,
-		});
+		if (isTask) {
+			segments.push({
+				type: "task-mention",
+				raw: mentionText,
+				slug: normalizedToken.slice(TASK_MENTION_PREFIX.length),
+			});
+		} else {
+			segments.push({
+				type: "file-mention",
+				raw: mentionText,
+				relativePath: normalizedToken,
+			});
+		}
 		cursor = mentionEnd;
 
 		// Guard against pathological regex behavior in zero-length matches.

@@ -7,7 +7,7 @@ import {
 	githubRepositories,
 	tasks,
 } from "@superset/db/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, like } from "drizzle-orm";
 
 import { env } from "@/env";
 import {
@@ -27,6 +27,26 @@ webhooks.on(
 			"[github/webhook] Installation deleted:",
 			payload.installation.id,
 		);
+
+		const [installation] = await db
+			.select()
+			.from(githubInstallations)
+			.where(
+				eq(githubInstallations.installationId, String(payload.installation.id)),
+			)
+			.limit(1);
+
+		if (installation) {
+			await db
+				.delete(tasks)
+				.where(
+					and(
+						eq(tasks.organizationId, installation.organizationId),
+						eq(tasks.externalProvider, "github"),
+					),
+				);
+		}
+
 		await db
 			.delete(githubInstallations)
 			.where(
@@ -125,8 +145,29 @@ webhooks.on(
 	async ({
 		payload,
 	}: EmitterWebhookEvent<"installation_repositories.removed">) => {
+		const [installation] = await db
+			.select()
+			.from(githubInstallations)
+			.where(
+				eq(githubInstallations.installationId, String(payload.installation.id)),
+			)
+			.limit(1);
+
 		for (const repo of payload.repositories_removed) {
 			console.log("[github/webhook] Repository removed:", repo.full_name);
+
+			if (installation) {
+				await db
+					.delete(tasks)
+					.where(
+						and(
+							eq(tasks.organizationId, installation.organizationId),
+							eq(tasks.externalProvider, "github"),
+							like(tasks.slug, `gh:${repo.full_name}#%`),
+						),
+					);
+			}
+
 			await db
 				.delete(githubRepositories)
 				.where(eq(githubRepositories.repoId, String(repo.id)));

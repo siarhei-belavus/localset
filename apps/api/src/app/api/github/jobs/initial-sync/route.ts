@@ -285,6 +285,7 @@ export async function POST(request: Request) {
 					html_url: string;
 					title: string;
 					body?: string | null;
+					created_at?: string;
 					state: string;
 					pull_request?: unknown;
 					assignee?: {

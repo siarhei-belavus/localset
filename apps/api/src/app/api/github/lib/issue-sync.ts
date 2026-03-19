@@ -85,6 +85,7 @@ export interface GitHubIssue {
 	html_url: string;
 	title: string;
 	body?: string | null;
+	created_at?: string;
 	state?: string;
 	pull_request?: unknown;
 	assignee?: {
@@ -112,6 +113,7 @@ interface IssueTaskMapping {
 	assigneeDisplayName: string | null;
 	assigneeAvatarUrl: string | null;
 	creatorId: string;
+	createdAt: Date;
 	lastSyncedAt: Date;
 	completedAt: Date | null;
 }
@@ -154,6 +156,7 @@ export function mapGithubIssueToTask(
 		assigneeDisplayName: issue.assignee?.login ?? null,
 		assigneeAvatarUrl: issue.assignee?.avatar_url ?? null,
 		creatorId: opts.creatorId,
+		createdAt: issue.created_at ? new Date(issue.created_at) : new Date(),
 		lastSyncedAt: new Date(),
 		completedAt:
 			opts.isCompleted && issue.closed_at

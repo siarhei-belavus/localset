@@ -262,25 +262,11 @@ interface AppMockupProps {
 export function AppMockup({ activeDemo = "Use Any Agents" }: AppMockupProps) {
 	return (
 		<div
-			className="relative w-full min-w-[700px] rounded-2xl overflow-hidden bg-black/60 backdrop-blur-xl shadow-[0_8px_60px_-12px_rgba(0,0,0,0.7)]"
+			className="relative w-full min-w-[700px] overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0b0b0c] shadow-[0_32px_80px_-36px_rgba(0,0,0,0.9)]"
 			style={{ aspectRatio: "16/10" }}
 		>
-			{/* Diagonal gradient glass border — bright on top-left & bottom-right corners */}
-			<div
-				className="absolute inset-0 rounded-2xl pointer-events-none z-10"
-				style={{
-					background:
-						"linear-gradient(135deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.02) 25%, rgba(255,255,255,0.02) 75%, rgba(255,255,255,0.15) 100%)",
-					mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-					WebkitMask:
-						"linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-					maskComposite: "exclude",
-					WebkitMaskComposite: "xor",
-					padding: "1.5px",
-				}}
-			/>
 			{/* Window chrome */}
-			<div className="flex items-center justify-between px-4 py-2.5 bg-white/[0.03] backdrop-blur-md border-b border-white/[0.06]">
+			<div className="flex items-center justify-between border-b border-white/[0.05] bg-[#111113] px-4 py-2.5">
 				<div className="flex items-center gap-1.5">
 					<div className="w-3 h-3 rounded-full bg-[#ff5f57]" />
 					<div className="w-3 h-3 rounded-full bg-[#febc2e]" />
@@ -292,9 +278,9 @@ export function AppMockup({ activeDemo = "Use Any Agents" }: AppMockupProps) {
 
 			<div className="flex h-[calc(100%-40px)]">
 				{/* Left sidebar */}
-				<div className="w-[210px] bg-white/[0.02] backdrop-blur-lg border-r border-white/[0.06] flex flex-col shrink-0">
+				<div className="flex w-[210px] shrink-0 flex-col border-r border-white/[0.05] bg-[#0f0f11]">
 					{/* New Workspace button */}
-					<div className="px-2.5 py-2.5 border-b border-white/[0.06]">
+					<div className="border-b border-white/[0.05] px-2.5 py-2.5">
 						<button
 							type="button"
 							className="flex items-center gap-2 text-xs text-muted-foreground/60 hover:text-muted-foreground cursor-pointer w-full px-2 py-1 hover:bg-white/[0.04] rounded"
@@ -305,7 +291,7 @@ export function AppMockup({ activeDemo = "Use Any Agents" }: AppMockupProps) {
 					</div>
 
 					{/* Repository section */}
-					<div className="flex items-center justify-between px-2.5 py-2 border-b border-white/[0.06] cursor-pointer hover:bg-white/[0.04]">
+					<div className="flex cursor-pointer items-center justify-between border-b border-white/[0.05] px-2.5 py-2 hover:bg-white/[0.03]">
 						<div className="flex items-center gap-2">
 							<span className="text-[13px] text-foreground/90">superset</span>
 							<span className="text-xs text-muted-foreground/50">(5)</span>
@@ -364,7 +350,7 @@ export function AppMockup({ activeDemo = "Use Any Agents" }: AppMockupProps) {
 					</div>
 
 					{/* Ports section */}
-					<div className="border-t border-white/[0.06] mb-2">
+					<div className="mb-2 border-t border-white/[0.05]">
 						<div className="flex items-center justify-between px-2.5 py-2">
 							<div className="flex items-center gap-1 text-xs text-muted-foreground/40">
 								<span>⌥</span>
@@ -396,9 +382,9 @@ export function AppMockup({ activeDemo = "Use Any Agents" }: AppMockupProps) {
 				</div>
 
 				{/* Main content area */}
-				<div className="flex-1 flex flex-col min-w-0">
+				<div className="flex min-w-0 flex-1 flex-col">
 					{/* Tab bar */}
-					<div className="flex items-center gap-0.5 px-2 py-1.5 bg-white/[0.02] backdrop-blur-md border-b border-white/[0.06]">
+					<div className="flex items-center gap-0.5 border-b border-white/[0.05] bg-[#101012] px-2 py-1.5">
 						{/* Claude tab - always visible, active */}
 						<div className="flex items-center gap-1.5 px-3 py-1 bg-white/[0.06] backdrop-blur-sm rounded-t text-xs text-foreground/90 border-b-2 border-cyan-500/70">
 							{activeDemo === "Create Parallel Branches" ? (
@@ -514,7 +500,7 @@ export function AppMockup({ activeDemo = "Use Any Agents" }: AppMockupProps) {
 					</div>
 
 					{/* Terminal header */}
-					<div className="flex items-center gap-2 px-4 py-2 bg-black/20 border-b border-white/[0.04]">
+					<div className="flex items-center gap-2 border-b border-white/[0.04] bg-[#0e0e10] px-4 py-2">
 						<span className="text-muted-foreground/40 text-xs">⬛</span>
 						<span className="text-xs text-muted-foreground/60">Terminal</span>
 						<div className="flex-1" />
@@ -523,7 +509,7 @@ export function AppMockup({ activeDemo = "Use Any Agents" }: AppMockupProps) {
 					</div>
 
 					{/* Terminal content */}
-					<div className="flex-1 bg-black/30 backdrop-blur-sm p-4 font-mono text-xs leading-relaxed overflow-hidden relative">
+					<div className="relative flex-1 overflow-hidden bg-[#09090a] p-4 font-mono text-xs leading-relaxed">
 						{/* Default terminal content */}
 						<motion.div
 							initial={{ opacity: 1 }}
@@ -659,7 +645,7 @@ export function AppMockup({ activeDemo = "Use Any Agents" }: AppMockupProps) {
 
 				{/* Right sidebar */}
 				<motion.div
-					className="bg-white/[0.02] backdrop-blur-lg border-l border-white/[0.06] flex flex-col shrink-0 relative overflow-hidden"
+					className="relative flex shrink-0 flex-col overflow-hidden border-l border-white/[0.05] bg-[#0f0f10]"
 					initial={{ width: 230 }}
 					animate={{
 						width: activeDemo === "See Changes" ? 380 : 230,
@@ -679,7 +665,7 @@ export function AppMockup({ activeDemo = "Use Any Agents" }: AppMockupProps) {
 						}}
 					>
 						{/* Header */}
-						<div className="flex items-center justify-between px-3 py-2.5 border-b border-white/[0.06]">
+						<div className="flex items-center justify-between border-b border-white/[0.05] px-3 py-2.5">
 							<span className="text-xs text-foreground/70">Review Changes</span>
 							<div className="flex items-center gap-1 text-xs">
 								<LuGitPullRequest className="size-4 text-cyan-400/70" />
@@ -688,7 +674,7 @@ export function AppMockup({ activeDemo = "Use Any Agents" }: AppMockupProps) {
 						</div>
 
 						{/* Commit & Push section */}
-						<div className="px-3 py-2.5 border-b border-white/[0.06] space-y-2">
+						<div className="space-y-2 border-b border-white/[0.05] px-3 py-2.5">
 							<div className="h-8 bg-black/20 rounded border border-white/[0.06] px-2.5 flex items-center text-xs text-muted-foreground/30">
 								Commit message...
 							</div>
@@ -726,7 +712,7 @@ export function AppMockup({ activeDemo = "Use Any Agents" }: AppMockupProps) {
 
 					{/* Diff review view - shown when "See Changes" is active */}
 					<motion.div
-						className="absolute inset-0 flex flex-col bg-black/30 backdrop-blur-md"
+						className="absolute inset-0 flex flex-col bg-[#0a0a0b]"
 						initial={{ opacity: 0 }}
 						animate={{
 							opacity: activeDemo === "See Changes" ? 1 : 0,
@@ -741,7 +727,7 @@ export function AppMockup({ activeDemo = "Use Any Agents" }: AppMockupProps) {
 						}}
 					>
 						{/* PR Header */}
-						<div className="flex items-center justify-between px-3 py-2.5 border-b border-white/[0.06]">
+						<div className="flex items-center justify-between border-b border-white/[0.05] px-3 py-2.5">
 							<div className="flex items-center gap-2">
 								<LuGitPullRequest className="size-4.5 text-emerald-400/80" />
 								<span className="text-sm text-foreground/80 font-medium">
@@ -754,7 +740,7 @@ export function AppMockup({ activeDemo = "Use Any Agents" }: AppMockupProps) {
 						</div>
 
 						{/* File tabs */}
-						<div className="flex items-center gap-1 px-3 py-2 border-b border-white/[0.06] text-xs">
+						<div className="flex items-center gap-1 border-b border-white/[0.05] px-3 py-2 text-xs">
 							<span className="px-2 py-1 bg-white/[0.06] rounded text-foreground/70">
 								cloud-workspace.ts
 							</span>
@@ -822,7 +808,7 @@ export function AppMockup({ activeDemo = "Use Any Agents" }: AppMockupProps) {
 						</div>
 
 						{/* Review actions */}
-						<div className="px-3 py-2.5 border-t border-white/[0.06] flex items-center gap-2">
+						<div className="flex items-center gap-2 border-t border-white/[0.05] px-3 py-2.5">
 							<button
 								type="button"
 								className="px-3 py-1.5 text-xs bg-emerald-500/[0.12] text-emerald-400/80 rounded hover:bg-emerald-500/20"
@@ -842,7 +828,7 @@ export function AppMockup({ activeDemo = "Use Any Agents" }: AppMockupProps) {
 
 			{/* External IDE Popup - shown when "Open in Any IDE" is active */}
 			<motion.div
-				className="absolute bottom-6 right-6 w-[55%] rounded-xl overflow-hidden bg-black/50 backdrop-blur-xl shadow-[0_8px_40px_-8px_rgba(0,0,0,0.6)]"
+				className="absolute bottom-6 right-6 w-[55%] overflow-hidden rounded-xl border border-white/[0.08] bg-[#0d0d0f] shadow-[0_24px_60px_-28px_rgba(0,0,0,0.9)]"
 				style={{ aspectRatio: "16/10" }}
 				initial={{ opacity: 0, scale: 0.9, y: 20 }}
 				animate={{
@@ -852,22 +838,8 @@ export function AppMockup({ activeDemo = "Use Any Agents" }: AppMockupProps) {
 				}}
 				transition={{ duration: 0.3, ease: "easeOut" }}
 			>
-				{/* Diagonal gradient glass border */}
-				<div
-					className="absolute inset-0 rounded-xl pointer-events-none z-10"
-					style={{
-						background:
-							"linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.02) 25%, rgba(255,255,255,0.02) 75%, rgba(255,255,255,0.13) 100%)",
-						mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-						WebkitMask:
-							"linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-						maskComposite: "exclude",
-						WebkitMaskComposite: "xor",
-						padding: "1.5px",
-					}}
-				/>
 				{/* IDE window chrome */}
-				<div className="flex items-center justify-between px-3 py-2 bg-white/[0.04] backdrop-blur-md border-b border-white/[0.06]">
+				<div className="flex items-center justify-between border-b border-white/[0.05] bg-[#111113] px-3 py-2">
 					<div className="flex items-center gap-1.5">
 						<div className="w-2.5 h-2.5 rounded-full bg-[#ff5f57]/80" />
 						<div className="w-2.5 h-2.5 rounded-full bg-[#febc2e]/80" />
@@ -879,7 +851,7 @@ export function AppMockup({ activeDemo = "Use Any Agents" }: AppMockupProps) {
 
 				<div className="flex h-[calc(100%-36px)]">
 					{/* File tree */}
-					<div className="w-[110px] bg-white/[0.02] border-r border-white/[0.06] p-3 text-sm">
+					<div className="w-[110px] border-r border-white/[0.05] bg-[#101012] p-3 text-sm">
 						<div className="flex items-center gap-2 text-muted-foreground/60 mb-2">
 							<LuFolder className="size-4" />
 							<span>src</span>
@@ -901,7 +873,7 @@ export function AppMockup({ activeDemo = "Use Any Agents" }: AppMockupProps) {
 					</div>
 
 					{/* Code editor */}
-					<div className="flex-1 bg-black/20 p-4 text-sm font-mono overflow-hidden">
+					<div className="flex-1 overflow-hidden bg-[#0a0a0c] p-4 text-sm font-mono">
 						<div className="space-y-1.5 leading-relaxed">
 							<div>
 								<span className="text-purple-400/80">import</span> {"{"} Agent{" "}

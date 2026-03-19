@@ -62,14 +62,15 @@ interface ClaudeSettingsJson {
 	[key: string]: unknown;
 }
 
-const CLAUDE_DYNAMIC_NOTIFY_PATH_MARKER = "$SUPERSET_HOME_DIR/hooks/notify.sh";
+const CLAUDE_DYNAMIC_NOTIFY_RELATIVE_PATH = `hooks/${NOTIFY_SCRIPT_NAME}`;
+const CLAUDE_DYNAMIC_NOTIFY_PATH_MARKER = `$SUPERSET_HOME_DIR/${CLAUDE_DYNAMIC_NOTIFY_RELATIVE_PATH}`;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export function getClaudeManagedHookCommand(): string {
-	return '[ -n "$SUPERSET_HOME_DIR" ] && [ -x "$SUPERSET_HOME_DIR/hooks/notify.sh" ] && "$SUPERSET_HOME_DIR/hooks/notify.sh" || true';
+	return `[ -n "$SUPERSET_HOME_DIR" ] && [ -x "$SUPERSET_HOME_DIR/${CLAUDE_DYNAMIC_NOTIFY_RELATIVE_PATH}" ] && "$SUPERSET_HOME_DIR/${CLAUDE_DYNAMIC_NOTIFY_RELATIVE_PATH}" || true`;
 }
 
 function isManagedClaudeHookCommand(

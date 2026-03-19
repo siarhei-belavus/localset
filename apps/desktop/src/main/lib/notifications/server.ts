@@ -50,16 +50,20 @@ app.use((req, res, next) => {
  * Explicit pane IDs are trusted to avoid dropping early hook events while
  * tabsState persistence is still catching up.
  */
-function resolvePaneId(
+export function resolvePaneId(
 	paneId: string | undefined,
 	tabId: string | undefined,
 	workspaceId: string | undefined,
 	sessionId: string | undefined,
 ): string | undefined {
+	if (paneId) {
+		return paneId;
+	}
+
 	try {
 		return resolvePaneIdFromTabsState(
 			appState.data.tabsState,
-			paneId,
+			undefined,
 			tabId,
 			workspaceId,
 			sessionId,

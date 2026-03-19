@@ -50,7 +50,7 @@ const CLIENT_LOGOS = [
 		name: "intercom",
 		label: "Intercom",
 		logo: "/logos/intercom-white.png",
-		height: 22,
+		height: 26,
 	},
 	{
 		name: "bytedance",

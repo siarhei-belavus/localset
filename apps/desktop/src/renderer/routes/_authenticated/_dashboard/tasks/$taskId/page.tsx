@@ -2,8 +2,10 @@ import { ScrollArea } from "@superset/ui/scroll-area";
 import { Separator } from "@superset/ui/separator";
 import { eq, or } from "@tanstack/db";
 import { useLiveQuery } from "@tanstack/react-db";
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo } from "react";
+import { apiTrpcClient } from "renderer/lib/api-trpc-client";
 import { useCollections } from "renderer/routes/_authenticated/providers/CollectionsProvider";
 import type { TaskWithStatus } from "../components/TasksView/hooks/useTasksTable";
 import { Route as TasksLayoutRoute } from "../layout";
@@ -26,6 +28,10 @@ function TaskDetailPage() {
 	const { tab, assignee, search } = TasksLayoutRoute.useSearch();
 	const navigate = useNavigate();
 	const collections = useCollections();
+	const isUuidTaskId =
+		/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+			taskId,
+		);
 
 	const backSearch = useMemo(() => {
 		const s: Record<string, string> = {};
@@ -60,6 +66,17 @@ function TaskDetailPage() {
 		if (!taskData || taskData.length === 0) return null;
 		return taskData[0];
 	}, [taskData]);
+	const taskFallbackQuery = useQuery({
+		queryKey: ["task-detail-fallback", taskId, isUuidTaskId ? "id" : "slug"],
+		queryFn: () =>
+			isUuidTaskId
+				? apiTrpcClient.task.byId.query(taskId)
+				: apiTrpcClient.task.bySlug.query(taskId),
+		enabled: !task,
+		retry: false,
+	});
+	const isTaskSyncing = !task && !!taskFallbackQuery.data;
+	const isTaskLoading = !task && taskFallbackQuery.isPending;
 
 	const handleBack = () => {
 		navigate({ to: "/tasks", search: backSearch });
@@ -84,6 +101,16 @@ function TaskDetailPage() {
 	};
 
 	if (!task) {
+		if (isTaskLoading || isTaskSyncing) {
+			return (
+				<div className="flex-1 flex items-center justify-center">
+					<span className="text-muted-foreground">
+						{isTaskSyncing ? "Syncing task..." : "Loading task..."}
+					</span>
+				</div>
+			);
+		}
+
 		return (
 			<div className="flex-1 flex items-center justify-center">
 				<span className="text-muted-foreground">Task not found</span>

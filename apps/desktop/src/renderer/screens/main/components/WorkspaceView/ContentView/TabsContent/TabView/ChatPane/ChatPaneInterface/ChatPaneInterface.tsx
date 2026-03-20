@@ -258,7 +258,6 @@ export function ChatPaneInterface({
 		sessionId,
 		cwd,
 		enabled: Boolean(sessionId),
-		fps: 60,
 	});
 	const {
 		commands,

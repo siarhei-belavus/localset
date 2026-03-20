@@ -1,6 +1,6 @@
 import { skipToken } from "@tanstack/react-query";
 import type { inferRouterInputs, inferRouterOutputs } from "@trpc/server";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatRuntimeServiceRouter } from "../../../server/trpc";
 import { chatRuntimeServiceTrpc } from "../../provider";
 
@@ -25,9 +25,16 @@ export interface UseChatDisplayOptions {
 	fps?: number;
 }
 
-function toRefetchIntervalMs(fps: number): number {
-	if (!Number.isFinite(fps) || fps <= 0) return Math.floor(1000 / 60);
-	return Math.max(16, Math.floor(1000 / fps));
+const DEFAULT_ACTIVE_POLL_FPS = 30;
+const MAX_ACTIVE_POLL_FPS = 30;
+const IDLE_DISPLAY_REFRESH_INTERVAL_MS = 2_000;
+
+export function toActiveRefetchIntervalMs(fps: number): number {
+	const normalizedFps =
+		Number.isFinite(fps) && fps > 0
+			? Math.min(fps, MAX_ACTIVE_POLL_FPS)
+			: DEFAULT_ACTIVE_POLL_FPS;
+	return Math.max(33, Math.floor(1000 / normalizedFps));
 }
 
 function findLastUserMessageIndex(messages: ListMessagesOutput): number {
@@ -113,31 +120,45 @@ function getLegacyImagePayload(
 }
 
 export function useChatDisplay(options: UseChatDisplayOptions) {
-	const { sessionId, cwd, enabled = true, fps = 60 } = options;
+	const {
+		sessionId,
+		cwd,
+		enabled = true,
+		fps = DEFAULT_ACTIVE_POLL_FPS,
+	} = options;
 	const utils = chatRuntimeServiceTrpc.useUtils();
 	const [commandError, setCommandError] = useState<unknown>(null);
 	const sessionCommandInput =
 		sessionId === null ? null : { sessionId, ...(cwd ? { cwd } : {}) };
 	const queryInput = sessionCommandInput ?? skipToken;
 	const isQueryEnabled = enabled && Boolean(sessionId);
-	const refetchIntervalMs = toRefetchIntervalMs(fps);
-	const queryOptions = {
-		enabled: isQueryEnabled,
-		refetchInterval: refetchIntervalMs,
-		refetchIntervalInBackground: true,
-		refetchOnWindowFocus: false,
-		staleTime: 0,
-		gcTime: 0,
-	} as const;
+	const activeRefetchIntervalMs = toActiveRefetchIntervalMs(fps);
 
 	const displayQuery = chatRuntimeServiceTrpc.session.getDisplayState.useQuery(
 		queryInput,
-		queryOptions,
+		{
+			enabled: isQueryEnabled,
+			refetchInterval: (query) =>
+				query.state.data?.isRunning
+					? activeRefetchIntervalMs
+					: IDLE_DISPLAY_REFRESH_INTERVAL_MS,
+			refetchIntervalInBackground: false,
+			refetchOnWindowFocus: true,
+			staleTime: 0,
+			gcTime: 0,
+		},
 	);
 
 	const messagesQuery = chatRuntimeServiceTrpc.session.listMessages.useQuery(
 		queryInput,
-		queryOptions,
+		{
+			enabled: isQueryEnabled,
+			refetchInterval: false,
+			refetchIntervalInBackground: false,
+			refetchOnWindowFocus: true,
+			staleTime: 0,
+			gcTime: 0,
+		},
 	);
 
 	const displayState = displayQuery.data ?? null;
@@ -162,6 +183,19 @@ export function useChatDisplay(options: UseChatDisplayOptions) {
 	const optimisticTextRef = useRef<string | null>(null);
 	const optimisticIdRef = useRef<string | null>(null);
 	const fileMessageCountAtSendRef = useRef<number | null>(null);
+	const previousIsRunningRef = useRef(isRunning);
+
+	const refreshSessionState = useCallback(async () => {
+		if (!sessionCommandInput) return;
+		await Promise.all([
+			utils.session.getDisplayState.invalidate(sessionCommandInput),
+			utils.session.listMessages.invalidate(sessionCommandInput),
+		]);
+	}, [
+		sessionCommandInput,
+		utils.session.getDisplayState,
+		utils.session.listMessages,
+	]);
 
 	useEffect(() => {
 		if (!optimisticIdRef.current) return;
@@ -193,6 +227,17 @@ export function useChatDisplay(options: UseChatDisplayOptions) {
 		optimisticIdRef.current = null;
 		fileMessageCountAtSendRef.current = null;
 	}, [historicalMessages]);
+
+	useEffect(() => {
+		const wasRunning = previousIsRunningRef.current;
+		previousIsRunningRef.current = isRunning;
+
+		if (!wasRunning || isRunning || !sessionCommandInput) {
+			return;
+		}
+
+		void utils.session.listMessages.invalidate(sessionCommandInput);
+	}, [isRunning, sessionCommandInput, utils.session.listMessages]);
 
 	const messages = useMemo(() => {
 		const withOptimistic = optimisticUserMessage
@@ -264,11 +309,13 @@ export function useChatDisplay(options: UseChatDisplayOptions) {
 				}
 
 				try {
-					return await utils.client.session.sendMessage.mutate({
+					const result = await utils.client.session.sendMessage.mutate({
 						sessionId,
 						...(cwd ? { cwd } : {}),
 						...input,
 					});
+					void refreshSessionState();
+					return result;
 				} catch (error) {
 					setCommandError(error);
 					setOptimisticUserMessage(null);
@@ -282,7 +329,10 @@ export function useChatDisplay(options: UseChatDisplayOptions) {
 				if (!sessionCommandInput) return;
 				setCommandError(null);
 				try {
-					return await utils.client.session.stop.mutate(sessionCommandInput);
+					const result =
+						await utils.client.session.stop.mutate(sessionCommandInput);
+					void refreshSessionState();
+					return result;
 				} catch (error) {
 					setCommandError(error);
 					return;
@@ -292,7 +342,10 @@ export function useChatDisplay(options: UseChatDisplayOptions) {
 				if (!sessionCommandInput) return;
 				setCommandError(null);
 				try {
-					return await utils.client.session.abort.mutate(sessionCommandInput);
+					const result =
+						await utils.client.session.abort.mutate(sessionCommandInput);
+					void refreshSessionState();
+					return result;
 				} catch (error) {
 					setCommandError(error);
 					return;
@@ -304,10 +357,12 @@ export function useChatDisplay(options: UseChatDisplayOptions) {
 				if (!sessionCommandInput) return;
 				setCommandError(null);
 				try {
-					return await utils.client.session.approval.respond.mutate({
+					const result = await utils.client.session.approval.respond.mutate({
 						...sessionCommandInput,
 						...input,
 					});
+					void refreshSessionState();
+					return result;
 				} catch (error) {
 					setCommandError(error);
 					return;
@@ -319,10 +374,12 @@ export function useChatDisplay(options: UseChatDisplayOptions) {
 				if (!sessionCommandInput) return;
 				setCommandError(null);
 				try {
-					return await utils.client.session.question.respond.mutate({
+					const result = await utils.client.session.question.respond.mutate({
 						...sessionCommandInput,
 						...input,
 					});
+					void refreshSessionState();
+					return result;
 				} catch (error) {
 					setCommandError(error);
 					return;
@@ -334,17 +391,26 @@ export function useChatDisplay(options: UseChatDisplayOptions) {
 				if (!sessionCommandInput) return;
 				setCommandError(null);
 				try {
-					return await utils.client.session.plan.respond.mutate({
+					const result = await utils.client.session.plan.respond.mutate({
 						...sessionCommandInput,
 						...input,
 					});
+					void refreshSessionState();
+					return result;
 				} catch (error) {
 					setCommandError(error);
 					return;
 				}
 			},
 		}),
-		[cwd, historicalMessages, sessionCommandInput, sessionId, utils],
+		[
+			cwd,
+			historicalMessages,
+			refreshSessionState,
+			sessionCommandInput,
+			sessionId,
+			utils,
+		],
 	);
 
 	return {

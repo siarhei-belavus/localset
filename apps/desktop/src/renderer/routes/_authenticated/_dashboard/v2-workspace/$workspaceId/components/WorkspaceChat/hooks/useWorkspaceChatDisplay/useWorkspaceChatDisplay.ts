@@ -1,6 +1,6 @@
 import type { AppRouter } from "@superset/host-service";
 import type { inferRouterInputs, inferRouterOutputs } from "@trpc/server";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { workspaceTrpc } from "renderer/lib/workspace-trpc";
 
 interface UseChatDisplayOptions {
@@ -10,9 +10,16 @@ interface UseChatDisplayOptions {
 	fps?: number;
 }
 
-function toRefetchIntervalMs(fps: number): number {
-	if (!Number.isFinite(fps) || fps <= 0) return Math.floor(1000 / 60);
-	return Math.max(16, Math.floor(1000 / fps));
+const DEFAULT_ACTIVE_POLL_FPS = 30;
+const MAX_ACTIVE_POLL_FPS = 30;
+const IDLE_DISPLAY_REFRESH_INTERVAL_MS = 2_000;
+
+function toActiveRefetchIntervalMs(fps: number): number {
+	const normalizedFps =
+		Number.isFinite(fps) && fps > 0
+			? Math.min(fps, MAX_ACTIVE_POLL_FPS)
+			: DEFAULT_ACTIVE_POLL_FPS;
+	return Math.max(33, Math.floor(1000 / normalizedFps));
 }
 
 type RouterInputs = inferRouterInputs<AppRouter>;
@@ -107,30 +114,44 @@ function getLegacyImagePayload(
 }
 
 export function useChatDisplay(options: UseChatDisplayOptions) {
-	const { sessionId, workspaceId, enabled = true, fps = 60 } = options;
+	const {
+		sessionId,
+		workspaceId,
+		enabled = true,
+		fps = DEFAULT_ACTIVE_POLL_FPS,
+	} = options;
 	const utils = workspaceTrpc.useUtils();
 	const [commandError, setCommandError] = useState<unknown>(null);
 	const queryInput =
 		sessionId === null ? undefined : { sessionId, workspaceId };
 	const isQueryEnabled = enabled && Boolean(sessionId);
-	const refetchIntervalMs = toRefetchIntervalMs(fps);
-	const queryOptions = {
-		enabled: isQueryEnabled && queryInput !== undefined,
-		refetchInterval: refetchIntervalMs,
-		refetchIntervalInBackground: true,
-		refetchOnWindowFocus: false,
-		staleTime: 0,
-		gcTime: 0,
-	} as const;
+	const activeRefetchIntervalMs = toActiveRefetchIntervalMs(fps);
 
 	const displayQuery = workspaceTrpc.chat.getDisplayState.useQuery(
 		queryInput as { sessionId: string; workspaceId: string },
-		queryOptions,
+		{
+			enabled: isQueryEnabled && queryInput !== undefined,
+			refetchInterval: (query) =>
+				query.state.data?.isRunning
+					? activeRefetchIntervalMs
+					: IDLE_DISPLAY_REFRESH_INTERVAL_MS,
+			refetchIntervalInBackground: false,
+			refetchOnWindowFocus: true,
+			staleTime: 0,
+			gcTime: 0,
+		},
 	);
 
 	const messagesQuery = workspaceTrpc.chat.listMessages.useQuery(
 		queryInput as { sessionId: string; workspaceId: string },
-		queryOptions,
+		{
+			enabled: isQueryEnabled && queryInput !== undefined,
+			refetchInterval: false,
+			refetchIntervalInBackground: false,
+			refetchOnWindowFocus: true,
+			staleTime: 0,
+			gcTime: 0,
+		},
 	);
 
 	const sendMessageMutation = workspaceTrpc.chat.sendMessage.useMutation();
@@ -163,6 +184,15 @@ export function useChatDisplay(options: UseChatDisplayOptions) {
 	const optimisticTextRef = useRef<string | null>(null);
 	const optimisticIdRef = useRef<string | null>(null);
 	const fileMessageCountAtSendRef = useRef<number | null>(null);
+	const previousIsRunningRef = useRef(isRunning);
+
+	const refreshChatQueries = useCallback(async () => {
+		if (!queryInput) return;
+		await Promise.all([
+			utils.chat.getDisplayState.invalidate(queryInput),
+			utils.chat.listMessages.invalidate(queryInput),
+		]);
+	}, [queryInput, utils.chat.getDisplayState, utils.chat.listMessages]);
 
 	useEffect(() => {
 		if (!optimisticIdRef.current) return;
@@ -193,6 +223,17 @@ export function useChatDisplay(options: UseChatDisplayOptions) {
 		optimisticIdRef.current = null;
 		fileMessageCountAtSendRef.current = null;
 	}, [historicalMessages]);
+
+	useEffect(() => {
+		const wasRunning = previousIsRunningRef.current;
+		previousIsRunningRef.current = isRunning;
+
+		if (!wasRunning || isRunning || !queryInput) {
+			return;
+		}
+
+		void utils.chat.listMessages.invalidate(queryInput);
+	}, [isRunning, queryInput, utils.chat.listMessages]);
 
 	const messages = useMemo(() => {
 		const withOptimistic = optimisticUserMessage
@@ -264,11 +305,13 @@ export function useChatDisplay(options: UseChatDisplayOptions) {
 				}
 
 				try {
-					return await sendMessageMutation.mutateAsync({
+					const result = await sendMessageMutation.mutateAsync({
 						sessionId,
 						workspaceId,
 						...input,
 					});
+					void refreshChatQueries();
+					return result;
 				} catch (error) {
 					setCommandError(error);
 					setOptimisticUserMessage(null);
@@ -282,7 +325,9 @@ export function useChatDisplay(options: UseChatDisplayOptions) {
 				if (!queryInput) return;
 				setCommandError(null);
 				try {
-					return await stopMutation.mutateAsync(queryInput);
+					const result = await stopMutation.mutateAsync(queryInput);
+					void refreshChatQueries();
+					return result;
 				} catch (error) {
 					setCommandError(error);
 					return;
@@ -295,10 +340,12 @@ export function useChatDisplay(options: UseChatDisplayOptions) {
 				if (!queryInput) return;
 				setCommandError(null);
 				try {
-					return await respondToApprovalMutation.mutateAsync({
+					const result = await respondToApprovalMutation.mutateAsync({
 						...queryInput,
 						...input,
 					});
+					void refreshChatQueries();
+					return result;
 				} catch (error) {
 					setCommandError(error);
 					return;
@@ -310,10 +357,12 @@ export function useChatDisplay(options: UseChatDisplayOptions) {
 				if (!queryInput) return;
 				setCommandError(null);
 				try {
-					return await respondToQuestionMutation.mutateAsync({
+					const result = await respondToQuestionMutation.mutateAsync({
 						...queryInput,
 						...input,
 					});
+					void refreshChatQueries();
+					return result;
 				} catch (error) {
 					setCommandError(error);
 					return;
@@ -328,10 +377,12 @@ export function useChatDisplay(options: UseChatDisplayOptions) {
 				if (!queryInput) return;
 				setCommandError(null);
 				try {
-					return await respondToPlanMutation.mutateAsync({
+					const result = await respondToPlanMutation.mutateAsync({
 						...queryInput,
 						...input,
 					});
+					void refreshChatQueries();
+					return result;
 				} catch (error) {
 					setCommandError(error);
 					return;
@@ -341,6 +392,7 @@ export function useChatDisplay(options: UseChatDisplayOptions) {
 		[
 			historicalMessages,
 			queryInput,
+			refreshChatQueries,
 			respondToApprovalMutation,
 			respondToPlanMutation,
 			respondToQuestionMutation,
@@ -350,20 +402,6 @@ export function useChatDisplay(options: UseChatDisplayOptions) {
 			workspaceId,
 		],
 	);
-
-	useEffect(() => {
-		if (!queryInput) return;
-		if (!isRunning) return;
-		void Promise.all([
-			utils.chat.getDisplayState.invalidate(queryInput),
-			utils.chat.listMessages.invalidate(queryInput),
-		]);
-	}, [
-		isRunning,
-		queryInput,
-		utils.chat.getDisplayState,
-		utils.chat.listMessages,
-	]);
 
 	return {
 		...displayState,

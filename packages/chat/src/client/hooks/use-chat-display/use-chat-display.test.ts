@@ -3,6 +3,7 @@ import type { inferRouterOutputs } from "@trpc/server";
 import type { ChatRuntimeServiceRouter } from "../../../server/trpc";
 import {
 	findLatestAssistantErrorMessage,
+	toActiveRefetchIntervalMs,
 	withoutActiveTurnAssistantHistory,
 } from "./use-chat-display";
 
@@ -120,5 +121,19 @@ describe("findLatestAssistantErrorMessage", () => {
 		]);
 
 		expect(error).toBeNull();
+	});
+});
+
+describe("toActiveRefetchIntervalMs", () => {
+	it("caps overly aggressive polling requests to 30 fps", () => {
+		expect(toActiveRefetchIntervalMs(60)).toBe(33);
+	});
+
+	it("preserves slower polling requests", () => {
+		expect(toActiveRefetchIntervalMs(4)).toBe(250);
+	});
+
+	it("falls back to the default active cadence for invalid values", () => {
+		expect(toActiveRefetchIntervalMs(0)).toBe(33);
 	});
 });

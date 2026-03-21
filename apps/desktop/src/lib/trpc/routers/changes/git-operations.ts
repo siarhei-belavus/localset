@@ -8,12 +8,16 @@ import {
 } from "../workspaces/utils/git-client";
 import {
 	clearGitHubStatusCacheForWorktree,
+	getPRForBranch,
 	getPullRequestRepoArgs,
 	getRepoContext,
 } from "../workspaces/utils/github/github";
 import { execWithShellEnv } from "../workspaces/utils/shell-env";
 import { resolveTrackingRemoteName } from "../workspaces/utils/upstream-ref";
-import { isUpstreamMissingError } from "./git-utils";
+import {
+	isNoPullRequestFoundMessage,
+	isUpstreamMissingError,
+} from "./git-utils";
 import { assertRegisteredWorktree } from "./security/path-validation";
 import {
 	buildPullRequestCompareUrl,
@@ -585,18 +589,98 @@ export const createGitOperationsRouter = () => {
 				async ({ input }): Promise<{ success: boolean; mergedAt?: string }> => {
 					assertRegisteredWorktree(input.worktreePath);
 
-					const args = ["pr", "merge", `--${input.strategy}`];
-
-					try {
+					const legacyMergeArgs = ["pr", "merge", `--${input.strategy}`];
+					const runMerge = async (
+						args: string[],
+					): Promise<{ success: boolean; mergedAt: string }> => {
 						await execWithShellEnv("gh", args, { cwd: input.worktreePath });
 						clearWorktreeStatusCaches(input.worktreePath);
 						return { success: true, mergedAt: new Date().toISOString() };
+					};
+
+					try {
+						const repoContext = await getRepoContext(input.worktreePath);
+						if (!repoContext) {
+							return await runMerge(legacyMergeArgs);
+						}
+
+						try {
+							const [{ stdout: branchOutput }, { stdout: headOutput }] =
+								await Promise.all([
+									execGitWithShellPath(["rev-parse", "--abbrev-ref", "HEAD"], {
+										cwd: input.worktreePath,
+									}),
+									execGitWithShellPath(["rev-parse", "HEAD"], {
+										cwd: input.worktreePath,
+									}),
+								]);
+							const localBranch = branchOutput.trim();
+							const headSha = headOutput.trim();
+
+							const pr = await getPRForBranch(
+								input.worktreePath,
+								localBranch,
+								repoContext,
+								headSha,
+							);
+							if (!pr) {
+								return await runMerge(legacyMergeArgs);
+							}
+							if (pr.state === "merged") {
+								throw new TRPCError({
+									code: "BAD_REQUEST",
+									message: "PR is already merged",
+								});
+							}
+							if (pr.state === "closed") {
+								throw new TRPCError({
+									code: "BAD_REQUEST",
+									message: "PR is closed and cannot be merged",
+								});
+							}
+
+							const args = [
+								"pr",
+								"merge",
+								String(pr.number),
+								`--${input.strategy}`,
+								...getPullRequestRepoArgs(repoContext),
+							];
+
+							try {
+								return await runMerge(args);
+							} catch (error) {
+								const message =
+									error instanceof Error ? error.message : String(error);
+								if (isNoPullRequestFoundMessage(message)) {
+									return await runMerge(legacyMergeArgs);
+								}
+								throw error;
+							}
+						} catch (error) {
+							if (error instanceof TRPCError) {
+								throw error;
+							}
+
+							console.warn(
+								"[git/mergePR] Explicit PR resolution failed; falling back to branch merge.",
+								{
+									worktreePath: input.worktreePath,
+									error: error instanceof Error ? error.message : String(error),
+								},
+							);
+							return await runMerge(legacyMergeArgs);
+						}
 					} catch (error) {
+						if (error instanceof TRPCError) {
+							throw error;
+						}
+
 						const message =
 							error instanceof Error ? error.message : String(error);
 						console.error("[git/mergePR] Failed to merge PR:", message);
 
-						if (message.includes("no pull requests found")) {
+						if (isNoPullRequestFoundMessage(message)) {
 							throw new TRPCError({
 								code: "NOT_FOUND",
 								message: "No pull request found for this branch",

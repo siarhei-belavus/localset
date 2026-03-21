@@ -217,9 +217,9 @@ export function getPullRequestRepoArgs(
 }
 
 const PR_JSON_FIELDS =
-	"number,title,url,state,isDraft,mergedAt,additions,deletions,headRefOid,headRefName,reviewDecision,statusCheckRollup,reviewRequests";
+	"number,title,url,state,isDraft,mergedAt,additions,deletions,headRefOid,headRefName,headRepositoryOwner,reviewDecision,statusCheckRollup,reviewRequests";
 
-async function getPRForBranch(
+export async function getPRForBranch(
 	worktreePath: string,
 	localBranch: string,
 	repoContext?: RepoContext,
@@ -228,6 +228,16 @@ async function getPRForBranch(
 	const byTracking = await getPRByBranchTracking(worktreePath, localBranch);
 	if (byTracking) {
 		return byTracking;
+	}
+
+	const byHeadBranch = await findPRByHeadBranch(
+		worktreePath,
+		localBranch,
+		repoContext,
+		headSha,
+	);
+	if (byHeadBranch) {
+		return byHeadBranch;
 	}
 
 	return findPRByHeadCommit(worktreePath, repoContext, headSha);
@@ -245,6 +255,83 @@ export function branchMatchesPR(
 	return (
 		localBranch === prHeadRefName || localBranch.endsWith(`/${prHeadRefName}`)
 	);
+}
+
+export function getPRHeadBranchCandidates(localBranch: string): string[] {
+	const strippedBranch = localBranch.includes("/")
+		? localBranch.slice(localBranch.indexOf("/") + 1)
+		: localBranch;
+
+	return Array.from(new Set([localBranch, strippedBranch].filter(Boolean)));
+}
+
+function getForkOwnerPrefix(
+	localBranch: string,
+	prHeadRefName: string,
+): string | null {
+	if (localBranch === prHeadRefName) {
+		return null;
+	}
+
+	const suffix = `/${prHeadRefName}`;
+	if (!localBranch.endsWith(suffix)) {
+		return null;
+	}
+
+	const prefix = localBranch.slice(0, -suffix.length).trim();
+	return prefix ? prefix.toLowerCase() : null;
+}
+
+export function prMatchesLocalBranch(
+	localBranch: string,
+	pr: Pick<GHPRResponse, "headRefName" | "headRepositoryOwner">,
+): boolean {
+	if (!branchMatchesPR(localBranch, pr.headRefName)) {
+		return false;
+	}
+
+	const ownerPrefix = getForkOwnerPrefix(localBranch, pr.headRefName);
+	if (!ownerPrefix) {
+		return localBranch === pr.headRefName;
+	}
+
+	return pr.headRepositoryOwner?.login.toLowerCase() === ownerPrefix;
+}
+
+function sortPRCandidates(
+	candidates: GHPRResponse[],
+	headSha?: string,
+): GHPRResponse[] {
+	const getStateRank = (candidate: GHPRResponse): number => {
+		if (candidate.state === "OPEN") return 2;
+		if (candidate.state === "MERGED") return 1;
+		return 0;
+	};
+
+	return [...candidates].sort((left, right) => {
+		const leftMatchesHead = Number(
+			Boolean(headSha && left.headRefOid === headSha),
+		);
+		const rightMatchesHead = Number(
+			Boolean(headSha && right.headRefOid === headSha),
+		);
+		if (leftMatchesHead !== rightMatchesHead) {
+			return rightMatchesHead - leftMatchesHead;
+		}
+
+		const stateDelta = getStateRank(right) - getStateRank(left);
+		if (stateDelta !== 0) {
+			return stateDelta;
+		}
+
+		const leftMergedAt = left.mergedAt ? Date.parse(left.mergedAt) : 0;
+		const rightMergedAt = right.mergedAt ? Date.parse(right.mergedAt) : 0;
+		if (leftMergedAt !== rightMergedAt) {
+			return rightMergedAt - leftMergedAt;
+		}
+
+		return right.number - left.number;
+	});
 }
 
 /**
@@ -271,7 +358,7 @@ async function getPRByBranchTracking(
 		// `gh pr view` can match via stale tracking refs (e.g. refs/pull/N/head)
 		// left over from a previous `gh pr checkout`, causing a new workspace
 		// to incorrectly show an old, unrelated PR.
-		if (!branchMatchesPR(localBranch, data.headRefName)) {
+		if (!prMatchesLocalBranch(localBranch, data)) {
 			return null;
 		}
 
@@ -284,6 +371,52 @@ async function getPRByBranchTracking(
 			return null;
 		}
 		throw error;
+	}
+}
+
+/**
+ * Looks up PRs by exact head branch name. This avoids relying on `gh pr view`
+ * branch inference, which can miss fork-tracked branches in some clones.
+ */
+async function findPRByHeadBranch(
+	worktreePath: string,
+	localBranch: string,
+	repoContext?: RepoContext,
+	headSha?: string,
+): Promise<GitHubStatus["pr"]> {
+	try {
+		const matches = new Map<number, GHPRResponse>();
+
+		for (const branchCandidate of getPRHeadBranchCandidates(localBranch)) {
+			const { stdout } = await execWithShellEnv(
+				"gh",
+				[
+					"pr",
+					"list",
+					...getPullRequestRepoArgs(repoContext),
+					"--state",
+					"all",
+					"--head",
+					branchCandidate,
+					"--limit",
+					"20",
+					"--json",
+					PR_JSON_FIELDS,
+				],
+				{ cwd: worktreePath },
+			);
+
+			for (const candidate of parsePRListResponse(stdout)) {
+				if (prMatchesLocalBranch(localBranch, candidate)) {
+					matches.set(candidate.number, candidate);
+				}
+			}
+		}
+
+		const bestMatch = sortPRCandidates([...matches.values()], headSha)[0];
+		return bestMatch ? formatPRData(bestMatch) : null;
+	} catch {
+		return null;
 	}
 }
 
@@ -328,10 +461,12 @@ async function findPRByHeadCommit(
 		);
 
 		const candidates = parsePRListResponse(stdout);
-		for (const candidate of candidates) {
-			if (candidate.headRefOid === headSha) {
-				return formatPRData(candidate);
-			}
+		const exactHeadMatches = candidates.filter(
+			(candidate) => candidate.headRefOid === headSha,
+		);
+		const bestMatch = sortPRCandidates(exactHeadMatches, headSha)[0];
+		if (bestMatch) {
+			return formatPRData(bestMatch);
 		}
 
 		return null;

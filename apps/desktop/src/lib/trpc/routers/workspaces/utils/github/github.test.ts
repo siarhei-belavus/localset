@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { branchMatchesPR, getPullRequestRepoArgs } from "./github";
+import {
+	branchMatchesPR,
+	getPRHeadBranchCandidates,
+	getPullRequestRepoArgs,
+	prMatchesLocalBranch,
+} from "./github";
 
 describe("branchMatchesPR", () => {
 	test("matches same-repo branch exactly", () => {
@@ -55,5 +60,56 @@ describe("getPullRequestRepoArgs", () => {
 				upstreamUrl: "not-a-github-url",
 			}),
 		).toEqual([]);
+	});
+});
+
+describe("getPRHeadBranchCandidates", () => {
+	test("returns exact branch first", () => {
+		expect(getPRHeadBranchCandidates("kitenite/feature")).toEqual([
+			"kitenite/feature",
+			"feature",
+		]);
+	});
+
+	test("de-duplicates single-segment branches", () => {
+		expect(getPRHeadBranchCandidates("main")).toEqual(["main"]);
+	});
+});
+
+describe("prMatchesLocalBranch", () => {
+	test("matches exact branch names", () => {
+		expect(
+			prMatchesLocalBranch("kitenite/feature", {
+				headRefName: "kitenite/feature",
+				headRepositoryOwner: { login: "Kitenite" },
+			}),
+		).toBe(true);
+	});
+
+	test("matches owner-prefixed local branches for fork PRs", () => {
+		expect(
+			prMatchesLocalBranch("forkowner/feature/my-thing", {
+				headRefName: "feature/my-thing",
+				headRepositoryOwner: { login: "forkowner" },
+			}),
+		).toBe(true);
+	});
+
+	test("rejects suffix-only matches when owner prefix does not match", () => {
+		expect(
+			prMatchesLocalBranch("feature/my-thing", {
+				headRefName: "my-thing",
+				headRepositoryOwner: { login: "someone-else" },
+			}),
+		).toBe(false);
+	});
+
+	test("rejects owner-prefixed matches without owner metadata", () => {
+		expect(
+			prMatchesLocalBranch("forkowner/feature/my-thing", {
+				headRefName: "feature/my-thing",
+				headRepositoryOwner: null,
+			}),
+		).toBe(false);
 	});
 });

@@ -47,6 +47,57 @@ const desktopDevOrigins =
 			]
 		: [];
 
+type SessionOrganizationContext = {
+	id?: string;
+	activeOrganizationId?: string | null;
+};
+
+async function resolveSessionOrganizationState({
+	userId,
+	session,
+}: {
+	userId?: string | null;
+	session?: SessionOrganizationContext | null;
+}) {
+	let activeOrganizationId = session?.activeOrganizationId ?? null;
+	if (!userId) {
+		return {
+			activeOrganizationId,
+			allMemberships: [],
+			membership: undefined,
+		};
+	}
+
+	const allMemberships = await db.query.members.findMany({
+		where: eq(members.userId, userId),
+		orderBy: desc(members.createdAt),
+	});
+
+	const membership =
+		(activeOrganizationId
+			? allMemberships.find(
+					(item) => item.organizationId === activeOrganizationId,
+				)
+			: undefined) ?? allMemberships[0];
+
+	const nextActiveOrganizationId = membership?.organizationId ?? null;
+	if (nextActiveOrganizationId !== activeOrganizationId) {
+		activeOrganizationId = nextActiveOrganizationId;
+		if (session?.id) {
+			await db
+				.update(authSchema.sessions)
+				.set({ activeOrganizationId })
+				.where(eq(authSchema.sessions.id, session.id));
+		}
+	}
+
+	return {
+		activeOrganizationId,
+		allMemberships,
+		membership,
+	};
+}
+
 export const auth = betterAuth({
 	baseURL: env.NEXT_PUBLIC_API_URL,
 	secret: env.BETTER_AUTH_SECRET,
@@ -206,14 +257,13 @@ export const auth = betterAuth({
 				// Org selection is handled in the consent page, so never redirect to a separate page
 				page: `${env.NEXT_PUBLIC_WEB_URL}/oauth/consent`,
 				shouldRedirect: () => false,
-				consentReferenceId: ({ session }) => {
-					const activeOrganizationId = (
-						session as { activeOrganizationId?: string }
-					).activeOrganizationId;
-					if (!activeOrganizationId) {
-						throw new Error("Organization must be selected before consent");
-					}
-					return activeOrganizationId;
+				consentReferenceId: async ({ user, session }) => {
+					const { activeOrganizationId } =
+						await resolveSessionOrganizationState({
+							userId: user?.id,
+							session: session as SessionOrganizationContext | undefined,
+						});
+					return activeOrganizationId ?? undefined;
 				},
 			},
 			customAccessTokenClaims: ({ referenceId }) => ({
@@ -541,30 +591,15 @@ export const auth = betterAuth({
 		bearer(),
 		customSession(async ({ user, session: baseSession }) => {
 			const session = baseSession as typeof sessions.$inferSelect;
-
-			let activeOrganizationId = session.activeOrganizationId;
-
-			const allMemberships = await db.query.members.findMany({
-				where: eq(members.userId, session.userId ?? user.id),
-				orderBy: desc(members.createdAt),
-			});
+			const { activeOrganizationId, allMemberships, membership } =
+				await resolveSessionOrganizationState({
+					userId: session.userId ?? user.id,
+					session,
+				});
 
 			const organizationIds = [
 				...new Set(allMemberships.map((m) => m.organizationId)),
 			];
-
-			// Find membership for active org, or fall back to most recent
-			const membership = activeOrganizationId
-				? allMemberships.find((m) => m.organizationId === activeOrganizationId)
-				: allMemberships[0];
-
-			if (!activeOrganizationId && membership?.organizationId) {
-				activeOrganizationId = membership.organizationId;
-				await db
-					.update(authSchema.sessions)
-					.set({ activeOrganizationId })
-					.where(eq(authSchema.sessions.id, session.id));
-			}
 
 			let plan: string | null = null;
 			if (activeOrganizationId) {

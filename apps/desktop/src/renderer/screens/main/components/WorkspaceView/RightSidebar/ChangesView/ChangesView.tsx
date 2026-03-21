@@ -42,6 +42,10 @@ interface ChangesViewProps {
 }
 
 const INACTIVE_BRANCH_REFETCH_INTERVAL_MS = 10_000;
+const GITHUB_STATUS_STALE_TIME_MS = 10_000;
+const GITHUB_STATUS_REFETCH_INTERVAL_MS = 10_000;
+const GITHUB_PR_COMMENTS_STALE_TIME_MS = 30_000;
+const GITHUB_PR_COMMENTS_REFETCH_INTERVAL_MS = 30_000;
 
 interface PendingChangesRefresh {
 	invalidateBranches: boolean;
@@ -109,7 +113,8 @@ export function ChangesView({
 		{ workspaceId: workspaceId ?? "" },
 		{
 			enabled: !!workspaceId && isActive,
-			refetchInterval: isActive ? 10000 : false,
+			refetchInterval: isActive ? GITHUB_STATUS_REFETCH_INTERVAL_MS : false,
+			staleTime: GITHUB_STATUS_STALE_TIME_MS,
 		},
 	);
 
@@ -250,6 +255,7 @@ export function ChangesView({
 		useState(false);
 	const [showDiscardStagedDialog, setShowDiscardStagedDialog] = useState(false);
 	const [activeTab, setActiveTab] = useState<ChangesSidebarTab>("diffs");
+	const activePullRequest = githubStatus?.pr ?? null;
 	const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const pendingRefreshRef = useRef<PendingChangesRefresh>({
 		invalidateBranches: false,
@@ -260,11 +266,25 @@ export function ChangesView({
 		isLoading: isGitHubCommentsLoading,
 		refetch: refetchGitHubComments,
 	} = electronTrpc.workspaces.getGitHubPRComments.useQuery(
-		{ workspaceId: workspaceId ?? "" },
 		{
-			enabled: !!workspaceId && isActive && !!githubStatus?.pr,
-			refetchInterval: isActive && githubStatus?.pr ? 30_000 : false,
-			refetchOnWindowFocus: isActive,
+			workspaceId: workspaceId ?? "",
+			...(activePullRequest
+				? {
+						prNumber: activePullRequest.number,
+						repoUrl: githubStatus?.repoUrl,
+						upstreamUrl: githubStatus?.upstreamUrl,
+						isFork: githubStatus?.isFork,
+					}
+				: {}),
+		},
+		{
+			enabled: !!workspaceId && isActive && !!activePullRequest,
+			refetchInterval:
+				isActive && activePullRequest
+					? GITHUB_PR_COMMENTS_REFETCH_INTERVAL_MS
+					: false,
+			staleTime: GITHUB_PR_COMMENTS_STALE_TIME_MS,
+			refetchOnWindowFocus: false,
 		},
 	);
 
@@ -277,7 +297,7 @@ export function ChangesView({
 	const handleRefresh = () => {
 		refetch();
 		refetchGithubStatus();
-		if (githubStatus?.pr) {
+		if (activePullRequest) {
 			refetchGitHubComments();
 		}
 	};
@@ -542,8 +562,8 @@ export function ChangesView({
 	]);
 
 	const hasStagedChanges = stagedFiles.length > 0;
-	const hasExistingPR = !!githubStatus?.pr;
-	const prUrl = githubStatus?.pr?.url;
+	const hasExistingPR = !!activePullRequest;
+	const prUrl = activePullRequest?.url;
 	const hasGitHubRepo = !!githubStatus?.repoUrl;
 	const defaultBranch =
 		branchData?.defaultBranch ?? status?.defaultBranch ?? "";
@@ -664,7 +684,7 @@ export function ChangesView({
 	}
 
 	const againstMainCount = status.againstBase.length;
-	const reviewCommentCount = githubStatus?.pr ? githubComments.length : 0;
+	const reviewCommentCount = activePullRequest ? githubComments.length : 0;
 
 	return (
 		<div className="flex flex-col flex-1 min-h-0">
@@ -772,7 +792,7 @@ export function ChangesView({
 					className="mt-0 flex min-h-0 flex-1 flex-col outline-none"
 				>
 					<ReviewPanel
-						pr={isGitHubStatusLoading ? null : (githubStatus?.pr ?? null)}
+						pr={isGitHubStatusLoading ? null : activePullRequest}
 						comments={githubComments}
 						isLoading={isGitHubStatusLoading}
 						isCommentsLoading={isGitHubCommentsLoading}

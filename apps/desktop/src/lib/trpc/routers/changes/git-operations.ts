@@ -7,7 +7,7 @@ import {
 	getSimpleGitWithShellPath,
 } from "../workspaces/utils/git-client";
 import {
-	clearGitHubStatusCacheForWorktree,
+	clearGitHubCachesForWorktree,
 	getPullRequestRepoArgs,
 	getRepoContext,
 } from "../workspaces/utils/github/github";
@@ -74,7 +74,7 @@ async function fetchCurrentBranch(git: SimpleGit): Promise<void> {
 }
 
 function clearWorktreeStatusCaches(worktreePath: string): void {
-	clearGitHubStatusCacheForWorktree(worktreePath);
+	clearGitHubCachesForWorktree(worktreePath);
 	clearStatusCacheForWorktree(worktreePath);
 }
 

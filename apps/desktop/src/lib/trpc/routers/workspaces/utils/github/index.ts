@@ -1,5 +1,6 @@
+export type { PullRequestCommentsTarget } from "./github";
 export {
-	clearGitHubStatusCacheForWorktree,
+	clearGitHubCachesForWorktree,
 	fetchGitHubPRComments,
 	fetchGitHubPRStatus,
 } from "./github";

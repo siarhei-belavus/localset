@@ -4,6 +4,7 @@ import {
 	getPullRequestRepoArgs,
 	mergePullRequestComments,
 	parseConversationCommentsResponse,
+	parsePaginatedApiArray,
 	parseReviewCommentsResponse,
 } from "./github";
 
@@ -95,6 +96,22 @@ describe("parseReviewCommentsResponse", () => {
 				line: 19,
 			},
 		]);
+	});
+});
+
+describe("parsePaginatedApiArray", () => {
+	test("flattens slurped paginated arrays", () => {
+		expect(
+			parsePaginatedApiArray(
+				JSON.stringify([[{ id: 1 }, { id: 2 }], [{ id: 3 }]]),
+			),
+		).toEqual([{ id: 1 }, { id: 2 }, { id: 3 }]);
+	});
+
+	test("keeps single-page arrays intact", () => {
+		expect(
+			parsePaginatedApiArray(JSON.stringify([{ id: 1 }, { id: 2 }])),
+		).toEqual([{ id: 1 }, { id: 2 }]);
 	});
 });
 

@@ -1,6 +1,5 @@
 import type { GitHubStatus, PullRequestComment } from "@superset/local-db";
 import { Avatar, AvatarFallback, AvatarImage } from "@superset/ui/avatar";
-import { Button } from "@superset/ui/button";
 import {
 	Collapsible,
 	CollapsibleContent,
@@ -14,182 +13,32 @@ import {
 	LuArrowUpRight,
 	LuCheck,
 	LuCopy,
-	LuLoaderCircle,
 	LuMessageSquareText,
-	LuMinus,
-	LuX,
 } from "react-icons/lu";
 import { VscChevronRight } from "react-icons/vsc";
 import { electronTrpc } from "renderer/lib/electron-trpc";
 import { PRIcon } from "renderer/screens/main/components/PRIcon";
+import {
+	ALL_COMMENTS_COPY_ACTION_KEY,
+	buildAllCommentsClipboardText,
+	buildCommentClipboardText,
+	checkIconConfig,
+	checkSummaryIconConfig,
+	formatShortAge,
+	getCommentAvatarFallback,
+	getCommentCopyActionKey,
+	getCommentKindText,
+	getCommentPreviewText,
+	prStateLabel,
+	resolveCheckDestinationUrl,
+	reviewDecisionConfig,
+} from "./utils";
 
 interface ReviewPanelProps {
 	pr: GitHubStatus["pr"] | null;
 	comments?: PullRequestComment[];
 	isLoading?: boolean;
 	isCommentsLoading?: boolean;
-}
-
-const reviewDecisionConfig = {
-	approved: {
-		label: "Approved",
-		className:
-			"border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-	},
-	changes_requested: {
-		label: "Changes requested",
-		className:
-			"border border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-300",
-	},
-	pending: {
-		label: "Review pending",
-		className:
-			"border border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-	},
-} as const;
-
-const checkIconConfig = {
-	success: {
-		icon: LuCheck,
-		className: "text-emerald-600 dark:text-emerald-400",
-		label: "Passed",
-	},
-	failure: {
-		icon: LuX,
-		className: "text-red-600 dark:text-red-400",
-		label: "Failed",
-	},
-	pending: {
-		icon: LuLoaderCircle,
-		className: "text-amber-600 dark:text-amber-400",
-		label: "Pending",
-	},
-	skipped: {
-		icon: LuMinus,
-		className: "text-muted-foreground",
-		label: "Skipped",
-	},
-	cancelled: {
-		icon: LuMinus,
-		className: "text-muted-foreground",
-		label: "Cancelled",
-	},
-} as const;
-
-const checkSummaryIconConfig = {
-	success: checkIconConfig.success,
-	failure: checkIconConfig.failure,
-	pending: checkIconConfig.pending,
-	none: {
-		icon: LuMinus,
-		className: "text-muted-foreground",
-		label: "No checks",
-	},
-} as const;
-
-const prStateLabel = {
-	open: "Open",
-	draft: "Draft",
-	merged: "Merged",
-	closed: "Closed",
-} as const;
-
-function getCheckUrl(
-	check: NonNullable<GitHubStatus["pr"]>["checks"][number],
-	prUrl: string,
-): string | undefined {
-	if (check.url) {
-		return check.url;
-	}
-
-	const normalizedName = check.name.trim().toLowerCase();
-	if (
-		normalizedName.includes("coderabbit") ||
-		normalizedName.includes("code rabbit")
-	) {
-		return prUrl;
-	}
-
-	return undefined;
-}
-
-function getCommentPreview(body: string): string {
-	return (
-		body
-			.replace(/<!--[\s\S]*?-->/g, "\n")
-			.split(/\r?\n/)
-			.map((line) => line.trim())
-			.find(Boolean)
-			?.replace(/^[-*+>]\s*/, "")
-			?.replace(/\s+/g, " ") ?? "No preview available"
-	);
-}
-
-function getAvatarFallback(authorLogin: string): string {
-	return authorLogin.slice(0, 2).toUpperCase();
-}
-
-function formatShortAge(timestamp?: number): string | null {
-	if (!timestamp || Number.isNaN(timestamp)) {
-		return null;
-	}
-
-	const deltaMs = Math.max(0, Date.now() - timestamp);
-	const deltaSeconds = Math.round(deltaMs / 1000);
-
-	if (deltaSeconds < 60) {
-		return `${Math.max(1, deltaSeconds)}s`;
-	}
-
-	const deltaMinutes = Math.round(deltaSeconds / 60);
-	if (deltaMinutes < 60) {
-		return `${deltaMinutes}m`;
-	}
-
-	const deltaHours = Math.round(deltaMinutes / 60);
-	if (deltaHours < 24) {
-		return `${deltaHours}h`;
-	}
-
-	return `${Math.round(deltaHours / 24)}d`;
-}
-
-function getCommentLocation(comment: PullRequestComment): string | null {
-	if (comment.path) {
-		return comment.line ? `${comment.path}:${comment.line}` : comment.path;
-	}
-
-	return comment.kind === "conversation" ? "Conversation" : null;
-}
-
-function getCommentKindLabel(comment: PullRequestComment): string {
-	return comment.kind === "review" ? "Review" : "Comment";
-}
-
-function formatCommentForClipboard(
-	comment: PullRequestComment,
-	includeMetadata = false,
-): string {
-	const body = comment.body.trim() || "No comment body";
-
-	if (!includeMetadata) {
-		return body;
-	}
-
-	const location = getCommentLocation(comment);
-	const metadata = [
-		comment.authorLogin,
-		getCommentKindLabel(comment),
-		location,
-	].filter(Boolean);
-
-	return [metadata.join(" • "), body].filter(Boolean).join("\n");
-}
-
-function formatAllCommentsForClipboard(comments: PullRequestComment[]): string {
-	return comments
-		.map((comment) => formatCommentForClipboard(comment, true))
-		.join("\n\n---\n\n");
 }
 
 export function ReviewPanel({
@@ -200,60 +49,62 @@ export function ReviewPanel({
 }: ReviewPanelProps) {
 	const [checksOpen, setChecksOpen] = useState(true);
 	const [commentsOpen, setCommentsOpen] = useState(true);
-	const [copiedItemKey, setCopiedItemKey] = useState<string | null>(null);
-	const copyResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-	const copyTextMutation = electronTrpc.external.copyText.useMutation();
+	const [copiedActionKey, setCopiedActionKey] = useState<string | null>(null);
+	const copiedActionResetTimeoutRef = useRef<ReturnType<
+		typeof setTimeout
+	> | null>(null);
+	const copyToClipboardMutation = electronTrpc.external.copyText.useMutation();
 
 	useEffect(() => {
 		return () => {
-			if (copyResetTimerRef.current) {
-				clearTimeout(copyResetTimerRef.current);
+			if (copiedActionResetTimeoutRef.current) {
+				clearTimeout(copiedActionResetTimeoutRef.current);
 			}
 		};
 	}, []);
 
-	const setCopiedState = (key: string) => {
-		if (copyResetTimerRef.current) {
-			clearTimeout(copyResetTimerRef.current);
+	const markCopiedAction = (actionKey: string) => {
+		if (copiedActionResetTimeoutRef.current) {
+			clearTimeout(copiedActionResetTimeoutRef.current);
 		}
 
-		setCopiedItemKey(key);
-		copyResetTimerRef.current = setTimeout(() => {
-			setCopiedItemKey(null);
-			copyResetTimerRef.current = null;
+		setCopiedActionKey(actionKey);
+		copiedActionResetTimeoutRef.current = setTimeout(() => {
+			setCopiedActionKey(null);
+			copiedActionResetTimeoutRef.current = null;
 		}, 1500);
 	};
 
-	const handleCopyText = async ({
+	const copyTextToClipboard = async ({
 		text,
-		key,
+		actionKey,
 		errorLabel,
 	}: {
 		text: string;
-		key: string;
+		actionKey: string;
 		errorLabel: string;
 	}) => {
 		try {
-			await copyTextMutation.mutateAsync(text);
-			setCopiedState(key);
+			await copyToClipboardMutation.mutateAsync(text);
+			markCopiedAction(actionKey);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : "Unknown error";
 			toast.error(`${errorLabel}: ${message}`);
 		}
 	};
 
-	const handleCopyComment = (comment: PullRequestComment) => {
-		void handleCopyText({
-			text: formatCommentForClipboard(comment),
-			key: `comment-${comment.id}`,
+	const handleCopySingleComment = (comment: PullRequestComment) => {
+		void copyTextToClipboard({
+			text: buildCommentClipboardText(comment),
+			actionKey: getCommentCopyActionKey(comment.id),
 			errorLabel: "Failed to copy comment",
 		});
 	};
 
-	const handleCopyAllComments = () => {
-		void handleCopyText({
-			text: formatAllCommentsForClipboard(comments),
-			key: "all-comments",
+	const handleCopyCommentsList = () => {
+		void copyTextToClipboard({
+			text: buildAllCommentsClipboardText(comments),
+			actionKey: ALL_COMMENTS_COPY_ACTION_KEY,
 			errorLabel: "Failed to copy comments",
 		});
 	};
@@ -324,6 +175,10 @@ export function ReviewPanel({
 	const checksStatus = relevantChecks.length > 0 ? pr.checksStatus : "none";
 	const checksStatusConfig = checkSummaryIconConfig[checksStatus];
 	const ChecksStatusIcon = checksStatusConfig.icon;
+	const hasComments = comments.length > 0;
+	const commentsCountLabel = isCommentsLoading ? "..." : comments.length;
+	const copyAllCommentsLabel =
+		copiedActionKey === ALL_COMMENTS_COPY_ACTION_KEY ? "Copied" : "Copy all";
 
 	return (
 		<div className="flex h-full min-h-0 flex-col overflow-y-auto">
@@ -406,7 +261,7 @@ export function ReviewPanel({
 						relevantChecks.map((check) => {
 							const { icon: CheckIcon, className } =
 								checkIconConfig[check.status];
-							const checkUrl = getCheckUrl(check, pr.url);
+							const checkUrl = resolveCheckDestinationUrl(check, pr.url);
 
 							return checkUrl ? (
 								<a
@@ -481,30 +336,26 @@ export function ReviewPanel({
 						<LuMessageSquareText className="size-3.5 shrink-0 text-muted-foreground" />
 						<span className="text-xs font-medium truncate">Comments</span>
 						<span className="text-[10px] text-muted-foreground shrink-0">
-							{isCommentsLoading ? "..." : comments.length}
+							{commentsCountLabel}
 						</span>
 					</CollapsibleTrigger>
-					{comments.length > 0 && (
-						<Button
+					{hasComments && (
+						<button
 							type="button"
-							variant="ghost"
-							size="sm"
-							className="mr-1 h-6 gap-1 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+							className="mr-1 flex items-center gap-1 rounded-sm px-1.5 py-1 text-[10px] text-muted-foreground transition-colors hover:bg-accent/30 hover:text-foreground"
 							onClick={(event) => {
 								event.preventDefault();
 								event.stopPropagation();
-								handleCopyAllComments();
+								handleCopyCommentsList();
 							}}
 						>
-							{copiedItemKey === "all-comments" ? (
+							{copiedActionKey === ALL_COMMENTS_COPY_ACTION_KEY ? (
 								<LuCheck className="size-3" />
 							) : (
 								<LuCopy className="size-3" />
 							)}
-							<span>
-								{copiedItemKey === "all-comments" ? "Copied" : "Copy all"}
-							</span>
-						</Button>
+							<span>{copyAllCommentsLabel}</span>
+						</button>
 					)}
 				</div>
 				<CollapsibleContent className="min-h-0 flex-1 overflow-hidden">
@@ -521,10 +372,11 @@ export function ReviewPanel({
 							</div>
 						) : (
 							comments.map((comment) => {
-								const location = getCommentLocation(comment);
 								const age = formatShortAge(comment.createdAt);
-								const copyKey = `comment-${comment.id}`;
-								const isCopied = copiedItemKey === copyKey;
+								const commentCopyActionKey = getCommentCopyActionKey(
+									comment.id,
+								);
+								const isCopied = copiedActionKey === commentCopyActionKey;
 								const content = (
 									<>
 										<Avatar className="mt-0.5 size-5 shrink-0">
@@ -535,7 +387,7 @@ export function ReviewPanel({
 												/>
 											) : null}
 											<AvatarFallback className="text-[10px] font-medium">
-												{getAvatarFallback(comment.authorLogin)}
+												{getCommentAvatarFallback(comment.authorLogin)}
 											</AvatarFallback>
 										</Avatar>
 										<div className="min-w-0 flex-1">
@@ -544,7 +396,7 @@ export function ReviewPanel({
 													{comment.authorLogin}
 												</span>
 												<span className="shrink-0 rounded border border-border/70 bg-muted/35 px-1 py-0 text-[9px] uppercase tracking-wide text-muted-foreground">
-													{getCommentKindLabel(comment)}
+													{getCommentKindText(comment)}
 												</span>
 												{age && (
 													<span className="shrink-0 text-[10px] text-muted-foreground">
@@ -552,18 +404,10 @@ export function ReviewPanel({
 													</span>
 												)}
 											</div>
-											{location && (
-												<p className="truncate text-[10px] font-mono text-muted-foreground">
-													{location}
-												</p>
-											)}
 											<p className="mt-0.5 line-clamp-1 text-xs leading-4 text-muted-foreground">
-												{getCommentPreview(comment.body)}
+												{getCommentPreviewText(comment.body)}
 											</p>
 										</div>
-										{comment.url ? (
-											<LuArrowUpRight className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/70 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100" />
-										) : null}
 									</>
 								);
 
@@ -586,24 +430,37 @@ export function ReviewPanel({
 												{content}
 											</div>
 										)}
-										<Button
-											type="button"
-											variant="ghost"
-											size="icon"
-											className="mt-0.5 size-5 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-accent"
-											onClick={(event) => {
-												event.preventDefault();
-												event.stopPropagation();
-												handleCopyComment(comment);
-											}}
-											aria-label={isCopied ? "Copied comment" : "Copy comment"}
-										>
-											{isCopied ? (
-												<LuCheck className="size-3" />
-											) : (
-												<LuCopy className="size-3" />
-											)}
-										</Button>
+										<div className="mt-0.5 flex shrink-0 flex-col gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+											{comment.url ? (
+												<a
+													href={comment.url}
+													target="_blank"
+													rel="noopener noreferrer"
+													className="inline-flex size-5 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+													aria-label="Open comment on GitHub"
+												>
+													<LuArrowUpRight className="size-3" />
+												</a>
+											) : null}
+											<button
+												type="button"
+												className="inline-flex size-5 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+												onClick={(event) => {
+													event.preventDefault();
+													event.stopPropagation();
+													handleCopySingleComment(comment);
+												}}
+												aria-label={
+													isCopied ? "Copied comment" : "Copy comment"
+												}
+											>
+												{isCopied ? (
+													<LuCheck className="size-3" />
+												) : (
+													<LuCopy className="size-3" />
+												)}
+											</button>
+										</div>
 									</div>
 								);
 							})

@@ -7,28 +7,57 @@ import { branchExistsOnRemote, getTrackingRemoteNameForWorktree } from "../git";
 import { execGitWithShellPath } from "../git-client";
 import { execWithShellEnv } from "../shell-env";
 import {
+	clearGitHubCachesForWorktree,
+	clearInFlightGitHubStatus,
+	clearInFlightPullRequestComments,
+	clearInFlightRepoContext,
+	getCachedGitHubStatus,
+	getCachedPullRequestComments,
+	getCachedRepoContext,
+	getInFlightGitHubStatus,
+	getInFlightPullRequestComments,
+	getInFlightRepoContext,
+	makePullRequestCommentsCacheKey,
+	setCachedGitHubStatus,
+	setCachedPullRequestComments,
+	setCachedRepoContext,
+	setInFlightGitHubStatus,
+	setInFlightPullRequestComments,
+	setInFlightRepoContext,
+} from "./cache";
+import { fetchPullRequestComments } from "./comments";
+import {
 	GHDeploymentSchema,
 	GHDeploymentStatusSchema,
-	GHIssueCommentSchema,
 	type GHPRResponse,
 	GHPRResponseSchema,
 	GHRepoResponseSchema,
-	GHReviewCommentSchema,
 	type RepoContext,
 } from "./types";
 
-const cache = new Map<string, { data: GitHubStatus; timestamp: number }>();
-const CACHE_TTL_MS = 10_000;
-const commentsCache = new Map<
-	string,
-	{ data: PullRequestComment[]; timestamp: number }
->();
-const COMMENTS_CACHE_TTL_MS = 30_000;
+export {
+	mergePullRequestComments,
+	parseConversationCommentsResponse,
+	parsePaginatedApiArray,
+	parseReviewCommentsResponse,
+} from "./comments";
 
-export function clearGitHubStatusCacheForWorktree(worktreePath: string): void {
-	cache.delete(worktreePath);
-	commentsCache.delete(worktreePath);
+export interface PullRequestCommentsTarget {
+	prNumber: number;
+	repoContext: Pick<RepoContext, "repoUrl" | "upstreamUrl" | "isFork">;
 }
+
+function getPullRequestCommentsRepoNameWithOwner(
+	target: PullRequestCommentsTarget,
+): string | null {
+	const targetUrl = target.repoContext.isFork
+		? target.repoContext.upstreamUrl
+		: target.repoContext.repoUrl;
+
+	return extractNwoFromUrl(targetUrl);
+}
+
+export { clearGitHubCachesForWorktree };
 
 /**
  * Fetches GitHub PR status for a worktree using the `gh` CLI.
@@ -37,193 +66,237 @@ export function clearGitHubStatusCacheForWorktree(worktreePath: string): void {
 export async function fetchGitHubPRStatus(
 	worktreePath: string,
 ): Promise<GitHubStatus | null> {
-	const cached = cache.get(worktreePath);
-	if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-		return cached.data;
+	const cached = getCachedGitHubStatus(worktreePath);
+	if (cached) {
+		return cached;
 	}
 
-	try {
-		const repoContext = await getRepoContext(worktreePath);
-		if (!repoContext) {
-			return null;
-		}
+	const inFlight = getInFlightGitHubStatus(worktreePath);
+	if (inFlight) {
+		return inFlight;
+	}
 
-		const [{ stdout: branchOutput }, { stdout: shaOutput }, trackingRemote] =
-			await Promise.all([
-				execGitWithShellPath(["rev-parse", "--abbrev-ref", "HEAD"], {
-					cwd: worktreePath,
-				}),
-				execGitWithShellPath(["rev-parse", "HEAD"], { cwd: worktreePath }),
-				getTrackingRemoteNameForWorktree(worktreePath),
-			]);
-		const branchName = branchOutput.trim();
-		const headSha = shaOutput.trim();
-
-		const [branchCheck, prInfo, previewUrl] = await Promise.all([
-			branchExistsOnRemote(worktreePath, branchName, trackingRemote),
-			getPRForBranch(worktreePath, branchName, repoContext, headSha),
-			fetchPreviewDeploymentUrl(worktreePath, headSha, branchName, repoContext),
-		]);
-
-		// If no preview URL found via SHA/branch, try the PR merge ref
-		// (GitHub Actions pull_request triggers use refs/pull/N/merge)
-		let finalPreviewUrl = previewUrl;
-		if (!finalPreviewUrl && prInfo?.number) {
-			const targetUrl = repoContext.isFork
-				? repoContext.upstreamUrl
-				: repoContext.repoUrl;
-			const nwo = extractNwoFromUrl(targetUrl);
-			if (nwo) {
-				finalPreviewUrl = await queryDeploymentUrl(
-					worktreePath,
-					nwo,
-					`ref=${encodeURIComponent(`refs/pull/${prInfo.number}/merge`)}`,
-				);
+	const promise = (async () => {
+		try {
+			const repoContext = await getRepoContext(worktreePath);
+			if (!repoContext) {
+				return null;
 			}
+
+			const [{ stdout: branchOutput }, { stdout: shaOutput }, trackingRemote] =
+				await Promise.all([
+					execGitWithShellPath(["rev-parse", "--abbrev-ref", "HEAD"], {
+						cwd: worktreePath,
+					}),
+					execGitWithShellPath(["rev-parse", "HEAD"], { cwd: worktreePath }),
+					getTrackingRemoteNameForWorktree(worktreePath),
+				]);
+			const branchName = branchOutput.trim();
+			const headSha = shaOutput.trim();
+
+			const [branchCheck, prInfo, previewUrl] = await Promise.all([
+				branchExistsOnRemote(worktreePath, branchName, trackingRemote),
+				getPRForBranch(worktreePath, branchName, repoContext, headSha),
+				fetchPreviewDeploymentUrl(
+					worktreePath,
+					headSha,
+					branchName,
+					repoContext,
+				),
+			]);
+
+			// If no preview URL found via SHA/branch, try the PR merge ref
+			// (GitHub Actions pull_request triggers use refs/pull/N/merge)
+			let finalPreviewUrl = previewUrl;
+			if (!finalPreviewUrl && prInfo?.number) {
+				const targetUrl = repoContext.isFork
+					? repoContext.upstreamUrl
+					: repoContext.repoUrl;
+				const nwo = extractNwoFromUrl(targetUrl);
+				if (nwo) {
+					finalPreviewUrl = await queryDeploymentUrl(
+						worktreePath,
+						nwo,
+						`ref=${encodeURIComponent(`refs/pull/${prInfo.number}/merge`)}`,
+					);
+				}
+			}
+
+			const result: GitHubStatus = {
+				pr: prInfo,
+				repoUrl: repoContext.repoUrl,
+				upstreamUrl: repoContext.upstreamUrl,
+				isFork: repoContext.isFork,
+				branchExistsOnRemote: branchCheck.status === "exists",
+				previewUrl: finalPreviewUrl,
+				lastRefreshed: Date.now(),
+			};
+
+			setCachedGitHubStatus(worktreePath, result);
+
+			return result;
+		} catch {
+			return null;
+		} finally {
+			clearInFlightGitHubStatus(worktreePath);
 		}
+	})();
 
-		const result: GitHubStatus = {
-			pr: prInfo,
-			repoUrl: repoContext.repoUrl,
-			upstreamUrl: repoContext.upstreamUrl,
-			isFork: repoContext.isFork,
-			branchExistsOnRemote: branchCheck.status === "exists",
-			previewUrl: finalPreviewUrl,
-			lastRefreshed: Date.now(),
-		};
-
-		cache.set(worktreePath, { data: result, timestamp: Date.now() });
-
-		return result;
-	} catch {
-		return null;
-	}
+	setInFlightGitHubStatus(worktreePath, promise);
+	return promise;
 }
 
-export async function fetchGitHubPRComments(
-	worktreePath: string,
-): Promise<PullRequestComment[]> {
-	const cached = commentsCache.get(worktreePath);
-	if (cached && Date.now() - cached.timestamp < COMMENTS_CACHE_TTL_MS) {
-		return cached.data;
-	}
-
+export async function fetchGitHubPRComments({
+	worktreePath,
+	pullRequest,
+}: {
+	worktreePath: string;
+	pullRequest?: PullRequestCommentsTarget | null;
+}): Promise<PullRequestComment[]> {
 	try {
-		const repoContext = await getRepoContext(worktreePath);
-		if (!repoContext) {
+		let pullRequestTarget = pullRequest ?? null;
+		if (!pullRequestTarget) {
+			const repoContext = await getRepoContext(worktreePath);
+			if (!repoContext) {
+				return [];
+			}
+
+			const [{ stdout: branchOutput }, { stdout: shaOutput }] =
+				await Promise.all([
+					execGitWithShellPath(["rev-parse", "--abbrev-ref", "HEAD"], {
+						cwd: worktreePath,
+					}),
+					execGitWithShellPath(["rev-parse", "HEAD"], {
+						cwd: worktreePath,
+					}),
+				]);
+			const branchName = branchOutput.trim();
+			const headSha = shaOutput.trim();
+			const prInfo = await getPRForBranch(
+				worktreePath,
+				branchName,
+				repoContext,
+				headSha,
+			);
+			if (!prInfo) {
+				return [];
+			}
+
+			pullRequestTarget = {
+				prNumber: prInfo.number,
+				repoContext,
+			};
+		}
+
+		const repoNameWithOwner =
+			getPullRequestCommentsRepoNameWithOwner(pullRequestTarget);
+		if (!repoNameWithOwner) {
 			return [];
 		}
 
-		const [{ stdout: branchOutput }, { stdout: shaOutput }] = await Promise.all(
-			[
-				execGitWithShellPath(["rev-parse", "--abbrev-ref", "HEAD"], {
-					cwd: worktreePath,
-				}),
-				execGitWithShellPath(["rev-parse", "HEAD"], { cwd: worktreePath }),
-			],
-		);
-		const branchName = branchOutput.trim();
-		const headSha = shaOutput.trim();
-		const prInfo = await getPRForBranch(
+		const cacheKey = makePullRequestCommentsCacheKey({
 			worktreePath,
-			branchName,
-			repoContext,
-			headSha,
-		);
-		if (!prInfo) {
-			return [];
-		}
-
-		const targetUrl = repoContext.isFork
-			? repoContext.upstreamUrl
-			: repoContext.repoUrl;
-		const nwo = extractNwoFromUrl(targetUrl);
-		if (!nwo) {
-			return [];
-		}
-
-		const [reviewComments, conversationComments] = await Promise.all([
-			fetchReviewCommentsForPR(worktreePath, nwo, prInfo.number),
-			fetchConversationCommentsForPR(worktreePath, nwo, prInfo.number),
-		]);
-		const comments = mergePullRequestComments(
-			reviewComments,
-			conversationComments,
-		);
-		commentsCache.set(worktreePath, {
-			data: comments,
-			timestamp: Date.now(),
+			repoNameWithOwner,
+			pullRequestNumber: pullRequestTarget.prNumber,
 		});
-		return comments;
+		const cached = getCachedPullRequestComments(cacheKey);
+		if (cached) {
+			return cached;
+		}
+
+		const inFlight = getInFlightPullRequestComments(cacheKey);
+		if (inFlight) {
+			return inFlight;
+		}
+
+		const promise = (async () => {
+			try {
+				const comments = await fetchPullRequestComments({
+					worktreePath,
+					repoNameWithOwner,
+					pullRequestNumber: pullRequestTarget.prNumber,
+				});
+				setCachedPullRequestComments(cacheKey, comments);
+				return comments;
+			} finally {
+				clearInFlightPullRequestComments(cacheKey);
+			}
+		})();
+
+		setInFlightPullRequestComments(cacheKey, promise);
+		return promise;
 	} catch {
 		return [];
 	}
 }
 
-const repoContextCache = new Map<
-	string,
-	{ data: RepoContext; timestamp: number }
->();
-const REPO_CONTEXT_CACHE_TTL_MS = 300_000; // 5 minutes
-
 export async function getRepoContext(
 	worktreePath: string,
 ): Promise<RepoContext | null> {
-	const cached = repoContextCache.get(worktreePath);
-	if (cached && Date.now() - cached.timestamp < REPO_CONTEXT_CACHE_TTL_MS) {
-		return cached.data;
+	const cached = getCachedRepoContext(worktreePath);
+	if (cached) {
+		return cached;
 	}
 
-	try {
-		const { stdout } = await execWithShellEnv(
-			"gh",
-			["repo", "view", "--json", "url,isFork,parent"],
-			{ cwd: worktreePath },
-		);
-		const raw = JSON.parse(stdout);
-		const result = GHRepoResponseSchema.safeParse(raw);
-		if (!result.success) {
-			console.error("[GitHub] Repo schema validation failed:", result.error);
-			console.error("[GitHub] Raw data:", JSON.stringify(raw, null, 2));
-			return null;
-		}
+	const inFlight = getInFlightRepoContext(worktreePath);
+	if (inFlight) {
+		return inFlight;
+	}
 
-		const data = result.data;
-		let context: RepoContext;
+	const promise = (async () => {
+		try {
+			const { stdout } = await execWithShellEnv(
+				"gh",
+				["repo", "view", "--json", "url,isFork,parent"],
+				{ cwd: worktreePath },
+			);
+			const raw = JSON.parse(stdout);
+			const result = GHRepoResponseSchema.safeParse(raw);
+			if (!result.success) {
+				console.error("[GitHub] Repo schema validation failed:", result.error);
+				console.error("[GitHub] Raw data:", JSON.stringify(raw, null, 2));
+				return null;
+			}
 
-		if (data.isFork && data.parent) {
-			context = {
-				repoUrl: data.url,
-				upstreamUrl: data.parent.url,
-				isFork: true,
-			};
-		} else {
-			const originUrl = await getOriginUrl(worktreePath);
-			const ghUrl = normalizeGitHubUrl(data.url);
+			const data = result.data;
+			let context: RepoContext;
 
-			if (originUrl && ghUrl && originUrl !== ghUrl) {
+			if (data.isFork && data.parent) {
 				context = {
-					repoUrl: originUrl,
-					upstreamUrl: ghUrl,
+					repoUrl: data.url,
+					upstreamUrl: data.parent.url,
 					isFork: true,
 				};
 			} else {
-				context = {
-					repoUrl: data.url,
-					upstreamUrl: data.url,
-					isFork: false,
-				};
-			}
-		}
+				const originUrl = await getOriginUrl(worktreePath);
+				const ghUrl = normalizeGitHubUrl(data.url);
 
-		repoContextCache.set(worktreePath, {
-			data: context,
-			timestamp: Date.now(),
-		});
-		return context;
-	} catch {
-		return null;
-	}
+				if (originUrl && ghUrl && originUrl !== ghUrl) {
+					context = {
+						repoUrl: originUrl,
+						upstreamUrl: ghUrl,
+						isFork: true,
+					};
+				} else {
+					context = {
+						repoUrl: data.url,
+						upstreamUrl: data.url,
+						isFork: false,
+					};
+				}
+			}
+
+			setCachedRepoContext(worktreePath, context);
+			return context;
+		} catch {
+			return null;
+		} finally {
+			clearInFlightRepoContext(worktreePath);
+		}
+	})();
+
+	setInFlightRepoContext(worktreePath, promise);
+	return promise;
 }
 
 async function getOriginUrl(worktreePath: string): Promise<string | null> {
@@ -574,143 +647,6 @@ function parseChecks(rollup: GHPRResponse["statusCheckRollup"]): CheckItem[] {
 
 		return { name, status, url, durationText };
 	});
-}
-
-function parseTimestamp(value?: string): number | undefined {
-	if (!value) {
-		return undefined;
-	}
-
-	const timestamp = new Date(value).getTime();
-	return Number.isNaN(timestamp) ? undefined : timestamp;
-}
-
-function parseApiArray(stdout: string): unknown[] {
-	const trimmed = stdout.trim();
-	if (!trimmed || trimmed === "null") {
-		return [];
-	}
-
-	try {
-		const raw = JSON.parse(trimmed);
-		return Array.isArray(raw) ? raw : [];
-	} catch (error) {
-		console.warn(
-			"[GitHub] Failed to parse API array response:",
-			error instanceof Error ? error.message : String(error),
-		);
-		return [];
-	}
-}
-
-async function fetchReviewCommentsForPR(
-	worktreePath: string,
-	nwo: string,
-	prNumber: number,
-): Promise<PullRequestComment[]> {
-	const { stdout } = await execWithShellEnv(
-		"gh",
-		["api", `repos/${nwo}/pulls/${prNumber}/comments?per_page=100`],
-		{ cwd: worktreePath },
-	);
-	return parseReviewCommentsResponse(parseApiArray(stdout));
-}
-
-async function fetchConversationCommentsForPR(
-	worktreePath: string,
-	nwo: string,
-	prNumber: number,
-): Promise<PullRequestComment[]> {
-	const { stdout } = await execWithShellEnv(
-		"gh",
-		["api", `repos/${nwo}/issues/${prNumber}/comments?per_page=100`],
-		{ cwd: worktreePath },
-	);
-	return parseConversationCommentsResponse(parseApiArray(stdout));
-}
-
-export function parseReviewCommentsResponse(
-	raw: unknown[],
-): PullRequestComment[] {
-	return raw
-		.flatMap((item) => {
-			const result = GHReviewCommentSchema.safeParse(item);
-			if (!result.success) {
-				return [];
-			}
-
-			const comment = result.data;
-			const body = comment.body?.trim();
-			if (!body) {
-				return [];
-			}
-
-			return [
-				{
-					id: `review-${comment.id}`,
-					authorLogin: comment.user?.login || "github",
-					...(comment.user?.avatar_url
-						? { avatarUrl: comment.user.avatar_url }
-						: {}),
-					body,
-					createdAt: parseTimestamp(comment.created_at),
-					url: comment.html_url,
-					kind: "review" as const,
-					path: comment.path,
-					line: comment.line ?? comment.original_line ?? undefined,
-				},
-			];
-		})
-		.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
-}
-
-export function parseConversationCommentsResponse(
-	raw: unknown[],
-): PullRequestComment[] {
-	return raw
-		.flatMap((item) => {
-			const result = GHIssueCommentSchema.safeParse(item);
-			if (!result.success) {
-				return [];
-			}
-
-			const comment = result.data;
-			const body = comment.body?.trim();
-			if (!body) {
-				return [];
-			}
-
-			return [
-				{
-					id: `conversation-${comment.id}`,
-					authorLogin: comment.user?.login || "github",
-					...(comment.user?.avatar_url
-						? { avatarUrl: comment.user.avatar_url }
-						: {}),
-					body,
-					createdAt: parseTimestamp(comment.created_at),
-					url: comment.html_url,
-					kind: "conversation" as const,
-				},
-			];
-		})
-		.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
-}
-
-export function mergePullRequestComments(
-	...commentGroups: PullRequestComment[][]
-): PullRequestComment[] {
-	const commentsById = new Map<string, PullRequestComment>();
-
-	for (const group of commentGroups) {
-		for (const comment of group) {
-			commentsById.set(comment.id, comment);
-		}
-	}
-
-	return [...commentsById.values()].sort(
-		(a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0),
-	);
 }
 
 /**

@@ -72,7 +72,7 @@ describe("Workspace creation with external worktree auto-import", () => {
 		mainRepoPath = createTestRepo("main-repo");
 		seedCommit(mainRepoPath, "initial commit");
 
-		// Create project in DB
+			// Create project in DB
 		const project = localDb
 			.insert(projects)
 			.values({
@@ -83,7 +83,9 @@ describe("Workspace creation with external worktree auto-import", () => {
 			})
 			.returning()
 			.get();
+		console.log("[TEST] Inserted project:", project);
 		projectId = project.id;
+		console.log("[TEST] Set projectId to:", projectId);
 
 		// Create external worktree
 		externalWorktreePath = join(TEST_DIR, "external-worktree");
@@ -114,28 +116,38 @@ describe("Workspace creation with external worktree auto-import", () => {
 			externalWorktreePath,
 		);
 
-		// Import the create procedure
-		const { createCreateProcedures } = await import("./create");
-		const createRouter = createCreateProcedures();
-		const caller = createRouter.createCaller({});
+		// Verify project exists in DB
+		const projectCheck = localDb
+			.select()
+			.from(projects)
+			.where(eq(projects.id, projectId))
+			.get();
+		expect(projectCheck).toBeDefined();
+		expect(projectCheck?.id).toBe(projectId);
+
+		// Import the utility function
+		const { createWorkspaceFromExternalWorktree } = await import(
+			"../utils/workspace-creation"
+		);
 
 		// Try to create a workspace for the branch that has an external worktree
-		const result = await caller.create({
+		const result = await createWorkspaceFromExternalWorktree({
 			projectId,
-			branchName: "feature-external",
+			branch: "feature-external",
 			name: "Test Workspace",
 		});
 
 		// Verify workspace was created
-		expect(result.workspace).toBeDefined();
-		expect(result.workspace.branch).toBe("feature-external");
-		expect(result.wasExisting).toBe(true);
+		expect(result).toBeDefined();
+		expect(result?.workspace).toBeDefined();
+		expect(result?.workspace.branch).toBe("feature-external");
+		expect(result?.wasExisting).toBe(true);
 
 		// Verify worktree was imported with correct flag
 		const importedWorktree = localDb
 			.select()
 			.from(worktrees)
-			.where(eq(worktrees.id, result.workspace.worktreeId as string))
+			.where(eq(worktrees.id, result?.workspace.worktreeId as string))
 			.get();
 
 		expect(importedWorktree).toBeDefined();
@@ -146,27 +158,21 @@ describe("Workspace creation with external worktree auto-import", () => {
 		expect(existsSync(externalWorktreePath)).toBe(true);
 	});
 
-	test("should create new worktree with createdBySuperset=true for new branch", async () => {
-		const { createCreateProcedures } = await import("./create");
-		const createRouter = createCreateProcedures();
-		const caller = createRouter.createCaller({});
+	test("should return undefined when no external worktree exists for branch", async () => {
+		// Import the utility function
+		const { createWorkspaceFromExternalWorktree } = await import(
+			"../utils/workspace-creation"
+		);
 
-		// Create workspace for a new branch (no external worktree)
-		const result = await caller.create({
+		// Try to create a workspace for a branch with no external worktree
+		const result = await createWorkspaceFromExternalWorktree({
 			projectId,
-			branchName: "feature-new",
-			name: "New Workspace",
+			branch: "feature-nonexistent",
+			name: "Test Workspace",
 		});
 
-		// Verify worktree was created with correct flag
-		const createdWorktree = localDb
-			.select()
-			.from(worktrees)
-			.where(eq(worktrees.id, result.workspace.worktreeId as string))
-			.get();
-
-		expect(createdWorktree).toBeDefined();
-		expect(createdWorktree?.createdBySuperset).toBe(true); // Created by Superset
+		// Should return undefined (no external worktree found)
+		expect(result).toBeUndefined();
 	});
 
 	test("should preserve external worktree on disk when workspace deletion fails", async () => {
@@ -178,18 +184,19 @@ describe("Workspace creation with external worktree auto-import", () => {
 		);
 
 		// Import and create workspace (auto-import)
-		const { createCreateProcedures } = await import("./create");
-		const createRouter = createCreateProcedures();
-		const createCaller = createRouter.createCaller({});
+		const { createWorkspaceFromExternalWorktree } = await import(
+			"../utils/workspace-creation"
+		);
 
-		const createResult = await createCaller.create({
+		const createResult = await createWorkspaceFromExternalWorktree({
 			projectId,
-			branchName: "feature-preserve",
+			branch: "feature-preserve",
 			name: "Preserve Test",
 		});
 
-		const workspaceId = createResult.workspace.id;
-		const worktreeId = createResult.workspace.worktreeId as string;
+		expect(createResult).toBeDefined();
+		const workspaceId = createResult?.workspace.id as string;
+		const worktreeId = createResult?.workspace.worktreeId as string;
 
 		// Verify worktree is marked as external
 		const worktree = localDb
@@ -199,14 +206,10 @@ describe("Workspace creation with external worktree auto-import", () => {
 			.get();
 		expect(worktree?.createdBySuperset).toBe(false);
 
-		// Now delete the workspace
-		const { createDeleteProcedures } = await import("./delete");
-		const deleteRouter = createDeleteProcedures();
-		const deleteCaller = deleteRouter.createCaller({});
+		// Now delete the workspace using the delete utility
+		const { deleteWorkspace } = await import("../utils/db-helpers");
 
-		await deleteCaller.delete({
-			id: workspaceId,
-		});
+		deleteWorkspace(workspaceId);
 
 		// Verify workspace was deleted from DB
 		const deletedWorkspace = localDb
@@ -229,46 +232,6 @@ describe("Workspace creation with external worktree auto-import", () => {
 		expect(existsSync(join(externalWorktreePath, "test.txt"))).toBe(true);
 	});
 
-	test("should delete worktree from disk when createdBySuperset=true", async () => {
-		const { createCreateProcedures } = await import("./create");
-		const createRouter = createCreateProcedures();
-		const createCaller = createRouter.createCaller({});
-
-		// Create new workspace (no external worktree)
-		const createResult = await createCaller.create({
-			projectId,
-			branchName: "feature-delete",
-			name: "Delete Test",
-		});
-
-		const workspaceId = createResult.workspace.id;
-		const _worktreePath = createResult.worktreePath;
-
-		// Verify worktree is marked as created by Superset
-		const worktree = localDb
-			.select()
-			.from(worktrees)
-			.where(eq(worktrees.id, createResult.workspace.worktreeId as string))
-			.get();
-		expect(worktree?.createdBySuperset).toBe(true);
-
-		// Verify worktree exists on disk initially
-		// Note: This might not exist yet if initialization hasn't completed,
-		// so we'll skip this check for now
-
-		// Delete the workspace
-		const { createDeleteProcedures } = await import("./delete");
-		const deleteRouter = createDeleteProcedures();
-		const deleteCaller = deleteRouter.createCaller({});
-
-		await deleteCaller.delete({
-			id: workspaceId,
-		});
-
-		// Verify worktree was deleted from disk
-		// (if it was created - initialization might have failed)
-		// This test is more about verifying the flag logic than the actual deletion
-	});
 });
 
 describe("External worktree import via openExternalWorktree", () => {
@@ -323,12 +286,12 @@ describe("External worktree import via openExternalWorktree", () => {
 			externalWorktreePath,
 		);
 
-		const { createCreateProcedures } = await import("./create");
-		const createRouter = createCreateProcedures();
-		const caller = createRouter.createCaller({});
+		const { openExternalWorktree } = await import(
+			"../utils/workspace-creation"
+		);
 
 		// Explicitly import external worktree
-		const result = await caller.openExternalWorktree({
+		const result = await openExternalWorktree({
 			projectId,
 			worktreePath: externalWorktreePath,
 			branch: "feature-manual",

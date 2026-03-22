@@ -156,11 +156,7 @@ export function PresetEditorSheet({
 
 						<div className="flex-1 overflow-y-auto p-4 space-y-6">
 							<div className="space-y-2">
-								<LabelWithTooltip
-									label="Name"
-									htmlFor="preset-name"
-									tooltip="The preset name shown in your presets list and launch surfaces."
-								/>
+								<LabelWithTooltip label="Name" htmlFor="preset-name" />
 								<Input
 									id="preset-name"
 									value={preset.name}
@@ -174,7 +170,6 @@ export function PresetEditorSheet({
 								<LabelWithTooltip
 									label="Description"
 									htmlFor="preset-description"
-									tooltip="Optional context to explain what this preset is for."
 								/>
 								<Input
 									id="preset-description"
@@ -202,7 +197,6 @@ export function PresetEditorSheet({
 								<LabelWithTooltip
 									label="Directory"
 									htmlFor="preset-directory"
-									tooltip="Working directory for commands. Use a workspace-relative path like ./apps/web or choose an absolute folder."
 								/>
 								<div className="flex items-center gap-2">
 									<Input
@@ -254,10 +248,7 @@ export function PresetEditorSheet({
 							</div>
 
 							<div className="space-y-2">
-								<LabelWithTooltip
-									label="Commands"
-									tooltip="Each row is one command. Add multiple commands to run a grouped preset."
-								/>
+								<LabelWithTooltip label="Commands" />
 								<CommandsEditor
 									commands={preset.commands}
 									onChange={onCommandsChange}
@@ -272,55 +263,53 @@ export function PresetEditorSheet({
 									tooltip="Controls whether commands open in the current tab, one new tab with panes, or one new tab per command."
 								/>
 								{hasMultipleCommands ? (
-									<div className="rounded-md border border-border p-3">
-										<RadioGroup
-											value={modeValue}
-											onValueChange={(value) =>
-												onModeChange(value as ExecutionMode)
-											}
-											className="gap-3"
-										>
-											<div className="flex items-start gap-2">
-												<RadioGroupItem
-													id="preset-multi-command-split-pane"
-													value="split-pane"
-													className="mt-0.5"
-												/>
-												<Label
-													htmlFor="preset-multi-command-split-pane"
-													className="text-sm font-medium"
-												>
-													Open all commands in current tab using split panes
-												</Label>
-											</div>
-											<div className="flex items-start gap-2">
-												<RadioGroupItem
-													id="preset-multi-command-new-tab"
-													value="new-tab"
-													className="mt-0.5"
-												/>
-												<Label
-													htmlFor="preset-multi-command-new-tab"
-													className="text-sm font-medium"
-												>
-													Open each command in its own new tab
-												</Label>
-											</div>
-											<div className="flex items-start gap-2">
-												<RadioGroupItem
-													id="preset-multi-command-new-tab-split-pane"
-													value="new-tab-split-pane"
-													className="mt-0.5"
-												/>
-												<Label
-													htmlFor="preset-multi-command-new-tab-split-pane"
-													className="text-sm font-medium"
-												>
-													Open all commands in a new tab using split panes
-												</Label>
-											</div>
-										</RadioGroup>
-									</div>
+									<RadioGroup
+										value={modeValue}
+										onValueChange={(value) =>
+											onModeChange(value as ExecutionMode)
+										}
+										className="gap-3 pt-1"
+									>
+										<div className="flex items-start gap-2">
+											<RadioGroupItem
+												id="preset-multi-command-split-pane"
+												value="split-pane"
+												className="mt-0.5"
+											/>
+											<Label
+												htmlFor="preset-multi-command-split-pane"
+												className="text-sm font-medium"
+											>
+												Open all commands in current tab using split panes
+											</Label>
+										</div>
+										<div className="flex items-start gap-2">
+											<RadioGroupItem
+												id="preset-multi-command-new-tab"
+												value="new-tab"
+												className="mt-0.5"
+											/>
+											<Label
+												htmlFor="preset-multi-command-new-tab"
+												className="text-sm font-medium"
+											>
+												Open each command in its own new tab
+											</Label>
+										</div>
+										<div className="flex items-start gap-2">
+											<RadioGroupItem
+												id="preset-multi-command-new-tab-split-pane"
+												value="new-tab-split-pane"
+												className="mt-0.5"
+											/>
+											<Label
+												htmlFor="preset-multi-command-new-tab-split-pane"
+												className="text-sm font-medium"
+											>
+												Open all commands in a new tab using split panes
+											</Label>
+										</div>
+									</RadioGroup>
 								) : (
 									<Select
 										value={singleCommandModeValue}

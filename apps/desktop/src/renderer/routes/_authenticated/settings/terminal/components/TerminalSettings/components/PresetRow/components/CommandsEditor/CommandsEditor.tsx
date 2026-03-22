@@ -68,14 +68,14 @@ export function CommandsEditor({
 					/>
 					{commands.length > 1 && (
 						<Button
-							variant="outline"
-							size="sm"
+							type="button"
+							variant="ghost"
+							size="icon-sm"
 							onClick={() => handleDeleteCommand(index)}
-							className="h-8 px-2 text-xs hover:bg-destructive/10 hover:text-destructive shrink-0"
-							aria-label="Delete command"
+							className="h-8 w-8 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+							aria-label={`Delete command ${index + 1}`}
 						>
 							<HiMiniXMark className="h-3.5 w-3.5" />
-							Delete
 						</Button>
 					)}
 				</div>

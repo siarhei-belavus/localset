@@ -1,4 +1,3 @@
-import { Badge } from "@superset/ui/badge";
 import { Button } from "@superset/ui/button";
 import {
 	Command,
@@ -87,7 +86,11 @@ export function ProjectTargetingField({
 
 	return (
 		<div className="space-y-3">
-			<RadioGroup value={appliesToValue} onValueChange={handleAppliesToChange}>
+			<RadioGroup
+				value={appliesToValue}
+				onValueChange={handleAppliesToChange}
+				className="gap-3"
+			>
 				<div className="flex items-start gap-2">
 					<RadioGroupItem value="all" id="preset-project-scope-all" />
 					<div className="space-y-0.5">
@@ -176,17 +179,10 @@ export function ProjectTargetingField({
 								</Popover>
 
 								{selectedProjects.length > 0 ? (
-									<div className="flex flex-wrap gap-1.5">
-										{selectedProjects.map((project) => (
-											<Badge key={project.id} variant="outline">
-												<span
-													className="size-1.5 rounded-full"
-													style={{ backgroundColor: project.color }}
-												/>
-												{project.name}
-											</Badge>
-										))}
-									</div>
+									<p className="text-xs text-muted-foreground">
+										{selectedProjects.length} project
+										{selectedProjects.length === 1 ? "" : "s"} selected.
+									</p>
 								) : (
 									<p className="text-xs text-muted-foreground">
 										Choose one or more projects.

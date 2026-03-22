@@ -117,19 +117,13 @@ describe("Workspace creation with external worktree auto-import", () => {
 		// Import the create procedure
 		const { createCreateProcedures } = await import("./create");
 		const createRouter = createCreateProcedures();
+		const caller = createRouter.createCaller({});
 
 		// Try to create a workspace for the branch that has an external worktree
-		const result = await createRouter._def.procedures.create._def.mutation({
-			input: {
-				projectId,
-				branchName: "feature-external",
-				name: "Test Workspace",
-			},
-			ctx: {} as any,
-			type: "mutation",
-			path: "workspaces.create",
-			rawInput: {},
-			meta: undefined,
+		const result = await caller.create({
+			projectId,
+			branchName: "feature-external",
+			name: "Test Workspace",
 		});
 
 		// Verify workspace was created
@@ -141,7 +135,7 @@ describe("Workspace creation with external worktree auto-import", () => {
 		const importedWorktree = localDb
 			.select()
 			.from(worktrees)
-			.where(eq(worktrees.id, result.workspace.worktreeId!))
+			.where(eq(worktrees.id, result.workspace.worktreeId as string))
 			.get();
 
 		expect(importedWorktree).toBeDefined();
@@ -155,26 +149,20 @@ describe("Workspace creation with external worktree auto-import", () => {
 	test("should create new worktree with createdBySuperset=true for new branch", async () => {
 		const { createCreateProcedures } = await import("./create");
 		const createRouter = createCreateProcedures();
+		const caller = createRouter.createCaller({});
 
 		// Create workspace for a new branch (no external worktree)
-		const result = await createRouter._def.procedures.create._def.mutation({
-			input: {
-				projectId,
-				branchName: "feature-new",
-				name: "New Workspace",
-			},
-			ctx: {} as any,
-			type: "mutation",
-			path: "workspaces.create",
-			rawInput: {},
-			meta: undefined,
+		const result = await caller.create({
+			projectId,
+			branchName: "feature-new",
+			name: "New Workspace",
 		});
 
 		// Verify worktree was created with correct flag
 		const createdWorktree = localDb
 			.select()
 			.from(worktrees)
-			.where(eq(worktrees.id, result.workspace.worktreeId!))
+			.where(eq(worktrees.id, result.workspace.worktreeId as string))
 			.get();
 
 		expect(createdWorktree).toBeDefined();
@@ -192,23 +180,16 @@ describe("Workspace creation with external worktree auto-import", () => {
 		// Import and create workspace (auto-import)
 		const { createCreateProcedures } = await import("./create");
 		const createRouter = createCreateProcedures();
+		const createCaller = createRouter.createCaller({});
 
-		const createResult =
-			await createRouter._def.procedures.create._def.mutation({
-				input: {
-					projectId,
-					branchName: "feature-preserve",
-					name: "Preserve Test",
-				},
-				ctx: {} as any,
-				type: "mutation",
-				path: "workspaces.create",
-				rawInput: {},
-				meta: undefined,
-			});
+		const createResult = await createCaller.create({
+			projectId,
+			branchName: "feature-preserve",
+			name: "Preserve Test",
+		});
 
 		const workspaceId = createResult.workspace.id;
-		const worktreeId = createResult.workspace.worktreeId!;
+		const worktreeId = createResult.workspace.worktreeId as string;
 
 		// Verify worktree is marked as external
 		const worktree = localDb
@@ -221,16 +202,10 @@ describe("Workspace creation with external worktree auto-import", () => {
 		// Now delete the workspace
 		const { createDeleteProcedures } = await import("./delete");
 		const deleteRouter = createDeleteProcedures();
+		const deleteCaller = deleteRouter.createCaller({});
 
-		await deleteRouter._def.procedures.delete._def.mutation({
-			input: {
-				id: workspaceId,
-			},
-			ctx: {} as any,
-			type: "mutation",
-			path: "workspaces.delete",
-			rawInput: {},
-			meta: undefined,
+		await deleteCaller.delete({
+			id: workspaceId,
 		});
 
 		// Verify workspace was deleted from DB
@@ -257,21 +232,14 @@ describe("Workspace creation with external worktree auto-import", () => {
 	test("should delete worktree from disk when createdBySuperset=true", async () => {
 		const { createCreateProcedures } = await import("./create");
 		const createRouter = createCreateProcedures();
+		const createCaller = createRouter.createCaller({});
 
 		// Create new workspace (no external worktree)
-		const createResult =
-			await createRouter._def.procedures.create._def.mutation({
-				input: {
-					projectId,
-					branchName: "feature-delete",
-					name: "Delete Test",
-				},
-				ctx: {} as any,
-				type: "mutation",
-				path: "workspaces.create",
-				rawInput: {},
-				meta: undefined,
-			});
+		const createResult = await createCaller.create({
+			projectId,
+			branchName: "feature-delete",
+			name: "Delete Test",
+		});
 
 		const workspaceId = createResult.workspace.id;
 		const _worktreePath = createResult.worktreePath;
@@ -280,7 +248,7 @@ describe("Workspace creation with external worktree auto-import", () => {
 		const worktree = localDb
 			.select()
 			.from(worktrees)
-			.where(eq(worktrees.id, createResult.workspace.worktreeId!))
+			.where(eq(worktrees.id, createResult.workspace.worktreeId as string))
 			.get();
 		expect(worktree?.createdBySuperset).toBe(true);
 
@@ -291,16 +259,10 @@ describe("Workspace creation with external worktree auto-import", () => {
 		// Delete the workspace
 		const { createDeleteProcedures } = await import("./delete");
 		const deleteRouter = createDeleteProcedures();
+		const deleteCaller = deleteRouter.createCaller({});
 
-		await deleteRouter._def.procedures.delete._def.mutation({
-			input: {
-				id: workspaceId,
-			},
-			ctx: {} as any,
-			type: "mutation",
-			path: "workspaces.delete",
-			rawInput: {},
-			meta: undefined,
+		await deleteCaller.delete({
+			id: workspaceId,
 		});
 
 		// Verify worktree was deleted from disk
@@ -363,27 +325,20 @@ describe("External worktree import via openExternalWorktree", () => {
 
 		const { createCreateProcedures } = await import("./create");
 		const createRouter = createCreateProcedures();
+		const caller = createRouter.createCaller({});
 
 		// Explicitly import external worktree
-		const result =
-			await createRouter._def.procedures.openExternalWorktree._def.mutation({
-				input: {
-					projectId,
-					worktreePath: externalWorktreePath,
-					branch: "feature-manual",
-				},
-				ctx: {} as any,
-				type: "mutation",
-				path: "workspaces.openExternalWorktree",
-				rawInput: {},
-				meta: undefined,
-			});
+		const result = await caller.openExternalWorktree({
+			projectId,
+			worktreePath: externalWorktreePath,
+			branch: "feature-manual",
+		});
 
 		// Verify worktree was marked as external
 		const importedWorktree = localDb
 			.select()
 			.from(worktrees)
-			.where(eq(worktrees.id, result.workspace.worktreeId!))
+			.where(eq(worktrees.id, result.workspace.worktreeId as string))
 			.get();
 
 		expect(importedWorktree).toBeDefined();

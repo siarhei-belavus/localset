@@ -1,3 +1,4 @@
+import type { SelectWorktree } from "@superset/local-db";
 import { projects, workspaces, worktrees } from "@superset/local-db";
 import { and, eq, isNull, not } from "drizzle-orm";
 import { track } from "main/lib/analytics";
@@ -465,7 +466,7 @@ export const createCreateProcedures = () => {
 						// Import the external worktree with transaction rollback on failure
 						let worktreeId: string | undefined;
 						let workspaceId: string | undefined;
-						let existingWorktreeByPath: any;
+						let existingWorktreeByPath: SelectWorktree | undefined;
 
 						try {
 							const knownBranches = await getKnownBranchesSafe(

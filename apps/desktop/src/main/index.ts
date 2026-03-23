@@ -28,6 +28,7 @@ import { setupAutoUpdater } from "./lib/auto-updater";
 import { resolveDevWorkspaceName } from "./lib/dev-workspace-name";
 import { setWorkspaceDockIcon } from "./lib/dock-icon";
 import { loadWebviewBrowserExtension } from "./lib/extensions";
+import { resolveFontCandidates } from "./lib/font-protocol";
 import { getHostServiceManager } from "./lib/host-service-manager";
 import { localDb } from "./lib/local-db";
 import { ensureProjectIconsDir, getProjectIconPath } from "./lib/project-icons";
@@ -301,19 +302,13 @@ if (!gotTheLock) {
 		// Serve system fonts (e.g. SF Mono on macOS) via custom protocol
 		// so the renderer can use @font-face with font-src 'self' CSP
 		if (process.platform === "darwin") {
-			const SYSTEM_FONT_DIRS = [
-				"/System/Applications/Utilities/Terminal.app/Contents/Resources/Fonts",
-				"/System/Library/Fonts",
-				"/Library/Fonts",
-			];
 			const fontProtocolHandler = async (request: Request) => {
 				const url = new URL(request.url);
 				const filename = path.basename(url.pathname);
 				if (!/\.(otf|ttf|woff2?)$/i.test(filename)) {
 					return new Response("Not found", { status: 404 });
 				}
-				for (const dir of SYSTEM_FONT_DIRS) {
-					const fontPath = path.join(dir, filename);
+				for (const fontPath of resolveFontCandidates(filename)) {
 					try {
 						return await net.fetch(pathToFileURL(fontPath).toString());
 					} catch {

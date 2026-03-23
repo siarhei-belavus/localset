@@ -15,9 +15,11 @@ import {
 	clearDocumentConflict,
 	discardDocumentChanges,
 	getEditorDocumentBaselineContent,
+	getEditorDocumentContentForSave,
 	getEditorDocumentCurrentContent,
 	hasEditorDocumentInitialized,
 	markDocumentSaved,
+	registerDocumentRenderedMarkdownBaseline,
 	requestPaneClose,
 	requestViewModeChange,
 	resumePendingIntent,
@@ -195,7 +197,7 @@ export function FileViewerPane({
 
 	const getCurrentContent = useCallback(() => {
 		if (hasEditorDocumentInitialized(documentKey)) {
-			return getEditorDocumentCurrentContent(documentKey);
+			return getEditorDocumentContentForSave(documentKey);
 		}
 
 		if (viewMode === "rendered") {
@@ -388,7 +390,11 @@ export function FileViewerPane({
 				return;
 			}
 
-			const dirty = updateDocumentDraft(documentKey, value);
+			const dirty = updateDocumentDraft(
+				documentKey,
+				value,
+				viewMode === "rendered" ? "rendered-markdown" : "raw",
+			);
 			if (dirty && !isPinned) {
 				pinPane(paneId);
 				useEditorSessionsStore.getState().patchSession(paneId, {
@@ -396,7 +402,18 @@ export function FileViewerPane({
 				});
 			}
 		},
-		[documentKey, isPinned, paneId, pinPane],
+		[documentKey, isPinned, paneId, pinPane, viewMode],
+	);
+
+	const handleMarkdownNormalizedValue = useCallback(
+		(value: string) => {
+			if (isDirty) {
+				return;
+			}
+
+			registerDocumentRenderedMarkdownBaseline(documentKey, value);
+		},
+		[documentKey, isDirty],
 	);
 
 	useEffect(() => {
@@ -575,7 +592,11 @@ export function FileViewerPane({
 	const currentDocumentContent = getEditorDocumentCurrentContent(documentKey);
 	const renderedContent = useMemo(() => {
 		if (hasEditorDocumentInitialized(documentKey)) {
-			return currentDocumentContent;
+			if (viewMode === "rendered") {
+				return currentDocumentContent;
+			}
+
+			return isDirty ? currentDocumentContent : baselineContent;
 		}
 
 		if (rawFileData?.ok === true) {
@@ -583,7 +604,14 @@ export function FileViewerPane({
 		}
 
 		return "";
-	}, [currentDocumentContent, documentKey, rawFileData]);
+	}, [
+		baselineContent,
+		currentDocumentContent,
+		documentKey,
+		isDirty,
+		rawFileData,
+		viewMode,
+	]);
 	const hasRenderedMode = isMarkdownFile(filePath) || isImageFile(filePath);
 	const hasDiff = !!diffCategory;
 	const unsavedDialogCopy = getUnsavedDialogCopy(
@@ -693,6 +721,7 @@ export function FileViewerPane({
 							hideUnchangedRegions={hideUnchangedRegions}
 							onSaveFile={handleEditorSave}
 							onContentChange={handleContentChange}
+							onMarkdownNormalizedValue={handleMarkdownNormalizedValue}
 							onSwitchToRawAtLocation={handleSwitchToRawAtLocation}
 							onSplitHorizontal={() => splitPaneHorizontal(tabId, paneId, path)}
 							onSplitVertical={() => splitPaneVertical(tabId, paneId, path)}

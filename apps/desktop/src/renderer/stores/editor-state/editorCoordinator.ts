@@ -8,15 +8,18 @@ import {
 	deleteDocumentBuffer,
 	discardDocumentCurrentContent,
 	getDocumentBaselineContent,
+	getDocumentComparisonBaselineContent,
 	getDocumentCurrentContent,
 	hasInitializedDocumentBuffer,
 	markDocumentSavedContent,
 	setDocumentCurrentContent,
 	setDocumentLoadedContent,
+	setDocumentRenderedMarkdownBaselineContent,
 	transferDocumentBuffer,
 } from "./editorBufferRegistry";
 import {
 	buildEditorDocumentKey,
+	type EditorContentRepresentation,
 	type EditorDocumentState,
 	type EditorPendingIntent,
 	type EditorSaveResult,
@@ -275,9 +278,13 @@ export function unbindFileViewerSession(paneId: string): void {
 export function updateDocumentDraft(
 	documentKey: string,
 	content: string,
+	representation: EditorContentRepresentation = "raw",
 ): boolean {
 	setDocumentCurrentContent(documentKey, content);
-	const baseline = getDocumentBaselineContent(documentKey);
+	const baseline = getDocumentComparisonBaselineContent(
+		documentKey,
+		representation,
+	);
 	const dirty = content !== baseline;
 
 	useEditorDocumentsStore.getState().patchDocument(documentKey, {
@@ -287,6 +294,13 @@ export function updateDocumentDraft(
 	});
 
 	return dirty;
+}
+
+export function registerDocumentRenderedMarkdownBaseline(
+	documentKey: string,
+	content: string,
+): void {
+	setDocumentRenderedMarkdownBaselineContent(documentKey, content);
 }
 
 export function applyLoadedDocumentContent(
@@ -393,6 +407,14 @@ export function getEditorDocumentCurrentContent(documentKey: string): string {
 	return getDocumentCurrentContent(documentKey);
 }
 
+export function getEditorDocumentContentForSave(documentKey: string): string {
+	if (!getDocumentState(documentKey)?.dirty) {
+		return getDocumentBaselineContent(documentKey);
+	}
+
+	return getDocumentCurrentContent(documentKey);
+}
+
 export function getEditorDocumentBaselineContent(documentKey: string): string {
 	return getDocumentBaselineContent(documentKey);
 }
@@ -420,7 +442,7 @@ export async function saveDocumentForPane(
 		return undefined;
 	}
 
-	const content = getDocumentCurrentContent(document.documentKey);
+	const content = getEditorDocumentContentForSave(document.documentKey);
 	const precondition =
 		options?.force || !document.baselineRevision
 			? undefined
@@ -468,7 +490,7 @@ export async function saveDocumentForPane(
 		return undefined;
 	}
 
-	const currentContent = getDocumentCurrentContent(document.documentKey);
+	const currentContent = getEditorDocumentContentForSave(document.documentKey);
 	markDocumentSaved(document.documentKey, {
 		savedContent: content,
 		currentContent,

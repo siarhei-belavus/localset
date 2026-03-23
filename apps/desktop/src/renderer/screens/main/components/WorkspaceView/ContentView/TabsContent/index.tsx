@@ -4,7 +4,7 @@ import { useParams } from "@tanstack/react-router";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useTabsStore } from "renderer/stores/tabs/store";
 import { resolveActiveTabIdForWorkspace } from "renderer/stores/tabs/utils";
-import { syncAllPositions } from "renderer/stores/webview-overlay";
+import { notifyOverlayLayoutChanged } from "renderer/stores/webview-overlay";
 import { EmptyTabView } from "./EmptyTabView";
 import { TabView } from "./TabView";
 import { getTabsToRender } from "./utils/getTabsToRender";
@@ -74,7 +74,7 @@ export function TabsContent({
 			return;
 		}
 		previousOverlaySyncKeyRef.current = overlaySyncKey;
-		syncAllPositions();
+		notifyOverlayLayoutChanged();
 	}, [overlaySyncKey]);
 
 	useEffect(() => {

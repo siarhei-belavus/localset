@@ -1,14 +1,7 @@
-import {
-	useCallback,
-	useEffect,
-	useLayoutEffect,
-	useRef,
-	useState,
-} from "react";
+import { useCallback, useLayoutEffect, useRef } from "react";
 import { electronTrpc } from "renderer/lib/electron-trpc";
 import { useTabsStore } from "renderer/stores/tabs/store";
 import {
-	getOrCreateWebview,
 	registerSlot,
 	unregisterSlot,
 	webviewGoBack,
@@ -36,21 +29,12 @@ interface UsePersistentWebviewOptions {
  */
 export function usePersistentWebview({ paneId }: UsePersistentWebviewOptions) {
 	const slotRef = useRef<HTMLDivElement | null>(null);
-	const [chromeRoot, setChromeRoot] = useState<HTMLDivElement | null>(null);
 
 	const browserState = useTabsStore((s) => s.panes[paneId]?.browser);
-	const currentUrl = browserState?.currentUrl ?? "about:blank";
 	const historyIndex = browserState?.historyIndex ?? 0;
 	const historyLength = browserState?.history.length ?? 0;
 	const canGoBack = historyIndex > 0;
 	const canGoForward = historyIndex < historyLength - 1;
-
-	// Ensure the overlay entry exists before the pane needs to render browser UI
-	// chrome like the blank state or error screen.
-	useEffect(() => {
-		const entry = getOrCreateWebview(paneId, currentUrl);
-		setChromeRoot(entry.chromeRoot);
-	}, [paneId, currentUrl]);
 
 	// Register / unregister the slot element with the overlay manager
 	useLayoutEffect(() => {
@@ -103,7 +87,6 @@ export function usePersistentWebview({ paneId }: UsePersistentWebviewOptions) {
 
 	return {
 		slotRef,
-		chromeRoot,
 		goBack,
 		goForward,
 		reload,

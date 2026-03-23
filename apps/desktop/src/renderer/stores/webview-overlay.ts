@@ -1,57 +1,44 @@
 /**
  * Module-level manager for persistent webview elements.
  *
- * Webviews live in a single overlay container mounted at the dashboard layout
- * level. They are NEVER reparented in the DOM — only shown/hidden and
- * repositioned — so Electron never reloads their guest processes.
- *
- * BrowserPane registers a "slot" (the DOM element where the webview should
- * visually appear). The overlay positions each webview wrapper to match its
- * slot's bounding rect.
+ * React owns the overlay surfaces and positioning. This module only owns the
+ * stable Electron webview node for each browser pane plus the imperative
+ * browser actions that operate on that node.
  */
 
 import { electronTrpcClient } from "renderer/lib/trpc-client";
 import { useTabsStore } from "renderer/stores/tabs/store";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 interface WebviewEntry {
 	webview: Electron.WebviewTag;
-	wrapper: HTMLDivElement;
-	chromeRoot: HTMLDivElement;
 	webContentsId: number | null;
 	faviconUrl: string | undefined;
 }
 
-// ---------------------------------------------------------------------------
-// State
-// ---------------------------------------------------------------------------
-
 const webviews = new Map<string, WebviewEntry>();
 const slots = new Map<string, HTMLElement>();
-let overlayContainer: HTMLDivElement | null = null;
-const slotListeners = new Set<() => void>();
+const overlayLayoutListeners = new Set<() => void>();
+let overlayLayoutVersion = 0;
 
-// ---------------------------------------------------------------------------
-// Overlay container (called by WebviewOverlay component)
-// ---------------------------------------------------------------------------
-
-export function setOverlayContainer(el: HTMLDivElement | null): void {
-	overlayContainer = el;
-	if (el) {
-		for (const entry of webviews.values()) {
-			if (!el.contains(entry.wrapper)) {
-				el.appendChild(entry.wrapper);
-			}
-		}
+function emitOverlayLayoutChange(): void {
+	overlayLayoutVersion += 1;
+	for (const listener of overlayLayoutListeners) {
+		listener();
 	}
 }
 
-// ---------------------------------------------------------------------------
-// URL helpers
-// ---------------------------------------------------------------------------
+export function subscribeOverlayLayout(listener: () => void): () => void {
+	overlayLayoutListeners.add(listener);
+	return () => overlayLayoutListeners.delete(listener);
+}
+
+export function getOverlayLayoutVersion(): number {
+	return overlayLayoutVersion;
+}
+
+export function notifyOverlayLayoutChanged(): void {
+	emitOverlayLayoutChange();
+}
 
 function sanitizeUrl(url: string): string {
 	if (/^https?:\/\//i.test(url) || url.startsWith("about:")) return url;
@@ -61,26 +48,10 @@ function sanitizeUrl(url: string): string {
 	return `https://www.google.com/search?q=${encodeURIComponent(url)}`;
 }
 
-// ---------------------------------------------------------------------------
-// Webview lifecycle
-// ---------------------------------------------------------------------------
-
-export function getOrCreateWebview(
-	paneId: string,
-	initialUrl: string,
-): WebviewEntry {
+function getOrCreateWebview(paneId: string, initialUrl: string): WebviewEntry {
 	const existing = webviews.get(paneId);
 	if (existing) return existing;
 
-	// Wrapper — positioned absolutely by the overlay
-	const wrapper = document.createElement("div");
-	wrapper.style.position = "absolute";
-	wrapper.style.overflow = "hidden";
-	wrapper.style.display = "none"; // hidden until a slot is registered
-	wrapper.style.pointerEvents = "auto";
-	wrapper.dataset.webviewPane = paneId;
-
-	// Webview element
 	const webview = document.createElement("webview") as Electron.WebviewTag;
 	webview.setAttribute("partition", "persist:superset");
 	webview.setAttribute("allowpopups", "");
@@ -89,48 +60,38 @@ export function getOrCreateWebview(
 	webview.style.width = "100%";
 	webview.style.height = "100%";
 	webview.style.border = "none";
-
-	// Browser UI overlays render into this layer so they stay above the webview
-	// even though the actual webview element lives in the global overlay.
-	const chromeRoot = document.createElement("div");
-	chromeRoot.style.position = "absolute";
-	chromeRoot.style.inset = "0";
-	chromeRoot.style.pointerEvents = "none";
-	chromeRoot.style.zIndex = "1";
-
-	wrapper.appendChild(webview);
-	wrapper.appendChild(chromeRoot);
+	webview.src = sanitizeUrl(initialUrl);
 
 	const entry: WebviewEntry = {
 		webview,
-		wrapper,
-		chromeRoot,
 		webContentsId: null,
 		faviconUrl: undefined,
 	};
 	webviews.set(paneId, entry);
 
-	if (overlayContainer) {
-		overlayContainer.appendChild(wrapper);
-	}
-
-	webview.src = sanitizeUrl(initialUrl);
 	attachEventHandlers(paneId, entry);
 
 	return entry;
 }
 
+export function attachWebviewToHost(
+	paneId: string,
+	hostElement: HTMLElement,
+	initialUrl: string,
+): void {
+	const entry = getOrCreateWebview(paneId, initialUrl);
+	if (!hostElement.contains(entry.webview)) {
+		hostElement.appendChild(entry.webview);
+	}
+}
+
 export function destroyWebview(paneId: string): void {
 	const entry = webviews.get(paneId);
 	if (!entry) return;
-	entry.wrapper.remove();
+	entry.webview.remove();
 	webviews.delete(paneId);
 	electronTrpcClient.browser.unregister.mutate({ paneId }).catch(() => {});
 }
-
-// ---------------------------------------------------------------------------
-// Event handlers (permanent — not tied to React lifecycle)
-// ---------------------------------------------------------------------------
 
 function attachEventHandlers(paneId: string, entry: WebviewEntry): void {
 	const { webview } = entry;
@@ -250,66 +211,19 @@ function attachEventHandlers(paneId: string, entry: WebviewEntry): void {
 	webview.addEventListener("did-fail-load", handleDidFailLoad as EventListener);
 }
 
-// ---------------------------------------------------------------------------
-// Slot management (called by BrowserPane)
-// ---------------------------------------------------------------------------
-
 export function registerSlot(paneId: string, element: HTMLElement): void {
 	slots.set(paneId, element);
-	// syncPosition checks visibility and sets display accordingly
-	syncPosition(paneId);
-	notifySlotListeners();
+	emitOverlayLayoutChange();
 }
 
 export function unregisterSlot(paneId: string): void {
 	slots.delete(paneId);
-	const entry = webviews.get(paneId);
-	if (entry) {
-		entry.wrapper.style.display = "none";
-	}
-	notifySlotListeners();
+	emitOverlayLayoutChange();
 }
 
-function notifySlotListeners(): void {
-	for (const listener of slotListeners) listener();
+export function getSlotElement(paneId: string): HTMLElement | null {
+	return slots.get(paneId) ?? null;
 }
-
-// ---------------------------------------------------------------------------
-// Position sync
-// ---------------------------------------------------------------------------
-
-export function syncPosition(paneId: string): void {
-	const entry = webviews.get(paneId);
-	const slot = slots.get(paneId);
-	if (!entry || !slot) return;
-
-	// Hide the webview if the slot is not visible (e.g. tab is inactive and
-	// has `visibility: hidden` via the getTabsToRender CSS toggling).
-	// `visibility` is inherited, so this catches hidden ancestors too.
-	const isVisible = getComputedStyle(slot).visibility !== "hidden";
-	if (!isVisible) {
-		entry.wrapper.style.display = "none";
-		return;
-	}
-
-	entry.wrapper.style.display = "block";
-	const rect = slot.getBoundingClientRect();
-	const { wrapper } = entry;
-	wrapper.style.left = `${rect.left}px`;
-	wrapper.style.top = `${rect.top}px`;
-	wrapper.style.width = `${rect.width}px`;
-	wrapper.style.height = `${rect.height}px`;
-}
-
-export function syncAllPositions(): void {
-	for (const paneId of slots.keys()) {
-		syncPosition(paneId);
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Navigation (called by BrowserPane via usePersistentWebview)
-// ---------------------------------------------------------------------------
 
 export function webviewNavigateTo(paneId: string, url: string): void {
 	const entry = webviews.get(paneId);

@@ -1,6 +1,6 @@
 import "@sentry/electron/preload";
 
-import { contextBridge, ipcRenderer, webUtils } from "electron";
+import { contextBridge, ipcRenderer, webFrame, webUtils } from "electron";
 import { exposeElectronTRPC } from "trpc-electron/main";
 
 declare const __APP_VERSION__: string;
@@ -19,6 +19,7 @@ const API = {
 	sayHelloFromBridge: () => console.log("\nHello from bridgeAPI! 👋\n\n"),
 	username: process.env.USER,
 	appVersion: __APP_VERSION__,
+	getZoomFactor: () => webFrame.getZoomFactor(),
 };
 
 // Store mapping of user listeners to wrapped listeners for proper cleanup

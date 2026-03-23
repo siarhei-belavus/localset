@@ -1,6 +1,7 @@
 import { useMatchRoute, useParams } from "@tanstack/react-router";
 import { HiOutlineWifi } from "react-icons/hi2";
 import { useOnlineStatus } from "renderer/hooks/useOnlineStatus";
+import { useTrafficLightPadding } from "renderer/hooks/useTrafficLightPadding";
 import { electronTrpc } from "renderer/lib/electron-trpc";
 import { getWorkspaceDisplayName } from "renderer/lib/getWorkspaceDisplayName";
 import { NavigationControls } from "./components/NavigationControls";
@@ -30,15 +31,11 @@ export function TopBar() {
 	const isOnline = useOnlineStatus();
 	// Default to Mac layout while loading to avoid overlap with traffic lights
 	const isMac = platform === undefined || platform === "darwin";
+	const paddingLeft = useTrafficLightPadding(isMac);
 
 	return (
 		<div className="drag gap-2 h-12 w-full flex items-center justify-between bg-muted/45 border-b border-border relative dark:bg-muted/35">
-			<div
-				className="flex items-center gap-1.5 h-full"
-				style={{
-					paddingLeft: isMac ? "88px" : "16px",
-				}}
-			>
+			<div className="flex items-center gap-1.5 h-full" style={{ paddingLeft }}>
 				<SidebarToggle />
 				<NavigationControls />
 				<ResourceConsumption />

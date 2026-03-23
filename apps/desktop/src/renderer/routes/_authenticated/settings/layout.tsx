@@ -5,6 +5,7 @@ import {
 	useNavigate,
 } from "@tanstack/react-router";
 import { useEffect } from "react";
+import { useTrafficLightPadding } from "renderer/hooks/useTrafficLightPadding";
 import { electronTrpc } from "renderer/lib/electron-trpc";
 import {
 	type SettingsSection,
@@ -82,6 +83,7 @@ function getPathFromSection(section: SettingsSection): string {
 function SettingsLayout() {
 	const { data: platform } = electronTrpc.window.getPlatform.useQuery();
 	const isMac = platform === undefined || platform === "darwin";
+	const paddingLeft = useTrafficLightPadding(isMac);
 	const searchQuery = useSettingsSearchQuery();
 	const location = useLocation();
 	const navigate = useNavigate();
@@ -109,12 +111,7 @@ function SettingsLayout() {
 
 	return (
 		<div className="flex flex-col h-screen w-screen bg-tertiary">
-			<div
-				className="drag h-8 w-full bg-tertiary"
-				style={{
-					paddingLeft: isMac ? "88px" : "16px",
-				}}
-			/>
+			<div className="drag h-8 w-full bg-tertiary" style={{ paddingLeft }} />
 
 			<div className="flex flex-1 overflow-hidden">
 				<SettingsSidebar />

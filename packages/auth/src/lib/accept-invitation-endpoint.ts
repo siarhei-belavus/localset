@@ -25,6 +25,30 @@ function verificationMatchesInvitation({
 	);
 }
 
+function getInvitationAcceptError(error: unknown) {
+	if (!(error instanceof Error)) {
+		return {
+			error: "Failed to accept invitation.",
+			status: 500,
+		};
+	}
+
+	if (
+		error.message ===
+		"Free plan is limited to 1 user. Upgrade to add more members."
+	) {
+		return {
+			error: error.message,
+			status: 409,
+		};
+	}
+
+	return {
+		error: error.message || "Failed to accept invitation.",
+		status: 400,
+	};
+}
+
 export const acceptInvitationEndpoint = {
 	id: "accept-invitation",
 	endpoints: {
@@ -126,7 +150,73 @@ export const acceptInvitationEndpoint = {
 					user = newUser;
 				}
 
-				// 4. Create session using Better Auth's proper API
+				// 4. Create member record if needed. Mark the invitation as accepted
+				// only once membership creation succeeds or already exists.
+				const existingMember = await db.query.members.findFirst({
+					where: and(
+						eq(members.organizationId, invitation.organization.id),
+						eq(members.userId, user.id),
+					),
+				});
+
+				if (!existingMember) {
+					await db
+						.update(invitations)
+						.set({ status: "accepted" })
+						.where(eq(invitations.id, invitationId));
+
+					// Dynamic import: this plugin needs to call the organization plugin's
+					// addMember API to trigger billing hooks (beforeAddMember/afterAddMember).
+					// server.ts imports this file as a plugin, so a static import would be circular.
+					// The import resolves at request time when all modules are fully initialized.
+					try {
+						const { auth } = await import("../server");
+						await auth.api.addMember({
+							body: {
+								organizationId: invitation.organization.id,
+								userId: user.id,
+								role:
+									(invitation.role as "member" | "owner" | "admin") ?? "member",
+							},
+						});
+					} catch (error) {
+						const memberAfterError = await db.query.members.findFirst({
+							where: and(
+								eq(members.organizationId, invitation.organization.id),
+								eq(members.userId, user.id),
+							),
+						});
+
+						if (!memberAfterError) {
+							await db
+								.update(invitations)
+								.set({ status: "pending" })
+								.where(eq(invitations.id, invitationId));
+
+							const acceptError = getInvitationAcceptError(error);
+							console.log(
+								"[invitation/accept] ERROR - Failed to add member:",
+								error,
+							);
+							return ctx.json(
+								{ error: acceptError.error },
+								{ status: acceptError.status },
+							);
+						}
+
+						console.warn(
+							"[invitation/accept] addMember threw after member creation; continuing",
+							error,
+						);
+					}
+				} else {
+					await db
+						.update(invitations)
+						.set({ status: "accepted" })
+						.where(eq(invitations.id, invitationId));
+				}
+
+				// 5. Create session using Better Auth's proper API
 				const session = await ctx.context.internalAdapter.createSession(
 					user.id,
 				);
@@ -155,36 +245,6 @@ export const acceptInvitationEndpoint = {
 					session: session,
 					user: user,
 				});
-
-				// 5. Accept invitation by updating status and creating member
-				await db
-					.update(invitations)
-					.set({ status: "accepted" })
-					.where(eq(invitations.id, invitationId));
-
-				// Create member record (check if not already a member)
-				const existingMember = await db.query.members.findFirst({
-					where: and(
-						eq(members.organizationId, invitation.organization.id),
-						eq(members.userId, user.id),
-					),
-				});
-
-				if (!existingMember) {
-					// Dynamic import: this plugin needs to call the organization plugin's
-					// addMember API to trigger billing hooks (beforeAddMember/afterAddMember).
-					// server.ts imports this file as a plugin, so a static import would be circular.
-					// The import resolves at request time when all modules are fully initialized.
-					const { auth } = await import("../server");
-					await auth.api.addMember({
-						body: {
-							organizationId: invitation.organization.id,
-							userId: user.id,
-							role:
-								(invitation.role as "member" | "owner" | "admin") ?? "member",
-						},
-					});
-				}
 
 				// 6. Delete verification token (one-time use)
 				await db.delete(verifications).where(eq(verifications.value, token));

@@ -1,3 +1,5 @@
+export type { BatchWorkspaceInput } from "./batch-status";
+export { batchFetchGitHubPRStatuses } from "./batch-status";
 export type { PullRequestCommentsTarget } from "./github";
 export {
 	clearGitHubCachesForWorktree,

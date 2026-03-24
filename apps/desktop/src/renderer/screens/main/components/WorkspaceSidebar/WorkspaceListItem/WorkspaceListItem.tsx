@@ -21,6 +21,7 @@ import { getHighestPriorityStatus } from "shared/tabs-types";
 import { CollapsedWorkspaceItem } from "./CollapsedWorkspaceItem";
 import { DeleteWorkspaceDialog } from "./components";
 import {
+	BATCH_GITHUB_STATUS_POLL_INTERVAL,
 	GITHUB_STATUS_STALE_TIME,
 	MAX_KEYBOARD_SHORTCUT_INDEX,
 } from "./constants";
@@ -142,14 +143,17 @@ export function WorkspaceListItem({
 	const { showDeleteDialog, setShowDeleteDialog, handleDeleteClick } =
 		useWorkspaceDeleteHandler();
 
-	const { data: githubStatus } =
-		electronTrpc.workspaces.getGitHubStatus.useQuery(
-			{ workspaceId: id },
+	// Batch-fetch all PR statuses for this project (deduped by React Query)
+	const { data: batchGitHubStatuses } =
+		electronTrpc.workspaces.getBatchGitHubStatus.useQuery(
+			{ projectId },
 			{
-				enabled: hasHovered && type === "worktree",
-				staleTime: GITHUB_STATUS_STALE_TIME,
+				enabled: type === "worktree",
+				refetchInterval: BATCH_GITHUB_STATUS_POLL_INTERVAL,
+				staleTime: BATCH_GITHUB_STATUS_POLL_INTERVAL,
 			},
 		);
+	const githubStatus = batchGitHubStatuses?.[id] ?? undefined;
 
 	const { status: localChanges } = useGitChangesStatus({
 		worktreePath,

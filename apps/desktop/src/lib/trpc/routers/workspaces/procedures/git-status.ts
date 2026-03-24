@@ -19,8 +19,11 @@ import {
 	refreshDefaultBranch,
 } from "../utils/git";
 import {
+	type BatchWorkspaceInput,
+	batchFetchGitHubPRStatuses,
 	fetchGitHubPRComments,
 	fetchGitHubPRStatus,
+	getRepoContext,
 	type PullRequestCommentsTarget,
 } from "../utils/github";
 
@@ -174,6 +177,81 @@ export const createGitStatusProcedures = () => {
 				}
 
 				return freshStatus;
+			}),
+
+		getBatchGitHubStatus: publicProcedure
+			.input(z.object({ projectId: z.string() }))
+			.query(async ({ input }) => {
+				const project = getProject(input.projectId);
+				if (!project) {
+					return {};
+				}
+
+				// Find all worktree-based workspaces for this project
+				const projectWorkspaces = localDb
+					.select()
+					.from(workspaces)
+					.where(
+						and(
+							eq(workspaces.projectId, input.projectId),
+							isNull(workspaces.deletingAt),
+						),
+					)
+					.all();
+
+				const batchInputs: BatchWorkspaceInput[] = [];
+				for (const ws of projectWorkspaces) {
+					if (!ws.worktreeId) continue;
+					const worktree = getWorktree(ws.worktreeId);
+					if (!worktree) continue;
+
+					const repoContext = await getRepoContext(worktree.path);
+					if (!repoContext) continue;
+
+					batchInputs.push({
+						worktreePath: worktree.path,
+						branchName: worktree.branch,
+						repoContext,
+					});
+				}
+
+				if (batchInputs.length === 0) {
+					return {};
+				}
+
+				const results = await batchFetchGitHubPRStatuses(
+					batchInputs,
+					project.mainRepoPath,
+				);
+
+				// Persist to DB for each worktree
+				for (const ws of projectWorkspaces) {
+					if (!ws.worktreeId) continue;
+					const worktree = getWorktree(ws.worktreeId);
+					if (!worktree) continue;
+					const status = results.get(worktree.path);
+					if (status) {
+						localDb
+							.update(worktrees)
+							.set({ githubStatus: status })
+							.where(eq(worktrees.id, worktree.id))
+							.run();
+					}
+				}
+
+				// Return as workspaceId -> GitHubStatus map
+				const response: Record<string, GitHubStatus> = {};
+				for (const ws of projectWorkspaces) {
+					if (!ws.worktreeId) continue;
+					const worktree = getWorktree(ws.worktreeId);
+					if (!worktree) continue;
+					const status = results.get(worktree.path);
+					if (status) {
+						response[ws.id] = status;
+					}
+				}
+
+				return response;
 			}),
 
 		getGitHubPRComments: publicProcedure

@@ -92,14 +92,20 @@ export function createApp(options?: CreateAppOptions): CreateAppResult {
 			origin: (origin) => {
 				// Allow requests from localhost, 127.0.0.1, and Electron app protocols
 				if (!origin) return null; // Block requests with no origin
-				const url = new URL(origin);
-				const isLocalhost =
-					url.hostname === "localhost" ||
-					url.hostname === "127.0.0.1" ||
-					url.hostname === "[::1]";
-				const isElectron = url.protocol === "app:"; // Electron custom protocol
 
-				return isLocalhost || isElectron ? origin : null;
+				try {
+					const url = new URL(origin);
+					const isLocalhost =
+						url.hostname === "localhost" ||
+						url.hostname === "127.0.0.1" ||
+						url.hostname === "[::1]";
+					const isElectron = url.protocol === "app:"; // Electron custom protocol
+
+					return isLocalhost || isElectron ? origin : null;
+				} catch {
+					// Reject malformed origins
+					return null;
+				}
 			},
 			credentials: true,
 		}),

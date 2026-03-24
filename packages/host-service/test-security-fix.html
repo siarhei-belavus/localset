@@ -156,7 +156,7 @@
             element.innerHTML = `<div class="test-result ${type}">${message}</div>`;
         }
 
-        async function _testUnauthenticated() {
+        async function testUnauthenticated() {
             const resultId = 'test1-result';
             displayResult(resultId, '⏳ Testing...', 'warning');
 
@@ -198,7 +198,7 @@
             );
         }
 
-        async function _testDataExfiltration() {
+        async function testDataExfiltration() {
             const resultId = 'test2-result';
             displayResult(resultId, '⏳ Attempting data exfiltration...', 'warning');
 
@@ -248,7 +248,7 @@
             }
         }
 
-        async function _testDestructiveOp() {
+        async function testDestructiveOp() {
             const resultId = 'test3-result';
             displayResult(resultId, '⏳ Testing destructive operations...', 'warning');
 
@@ -314,7 +314,7 @@
             );
         }
 
-        async function _testPortDiscovery() {
+        async function testPortDiscovery() {
             const resultId = 'test4-result';
             displayResult(resultId, '⏳ Scanning ports...', 'warning');
 

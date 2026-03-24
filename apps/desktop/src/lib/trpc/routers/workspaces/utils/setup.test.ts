@@ -3,7 +3,11 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { PROJECTS_DIR_NAME, SUPERSET_DIR_NAME } from "shared/constants";
-import { loadSetupConfig, mergeConfigs } from "./setup";
+import {
+	copySupersetConfigToWorktree,
+	loadSetupConfig,
+	mergeConfigs,
+} from "./setup";
 
 const TEST_DIR = join(tmpdir(), `superset-test-setup-${process.pid}`);
 const MAIN_REPO = join(TEST_DIR, "main-repo");
@@ -608,6 +612,97 @@ describe("mergeConfigs", () => {
 			{ setup: ["custom-install"] },
 		);
 		expect(result).toEqual({ setup: ["custom-install"], run: ["dev"] });
+	});
+});
+
+describe("copySupersetConfigToWorktree", () => {
+	beforeEach(() => {
+		mkdirSync(join(MAIN_REPO, ".superset"), { recursive: true });
+	});
+
+	afterEach(() => {
+		if (existsSync(TEST_DIR)) {
+			rmSync(TEST_DIR, { recursive: true, force: true });
+		}
+	});
+
+	test("does not copy config files to worktree so stale configs cannot mask main repo changes", () => {
+		// Simulate: user sets run command, config.json is written to main repo
+		writeFileSync(
+			join(MAIN_REPO, ".superset", "config.json"),
+			JSON.stringify({ setup: ["bun install"], run: ["cd xxx && pnpm dev"] }),
+		);
+		writeFileSync(
+			join(MAIN_REPO, ".superset", "config.local.json"),
+			JSON.stringify({ setup: { after: ["extra.sh"] } }),
+		);
+		// Also create a setup script that should be copied
+		writeFileSync(
+			join(MAIN_REPO, ".superset", "setup.sh"),
+			"#!/bin/bash\necho hello",
+		);
+
+		mkdirSync(WORKTREE, { recursive: true });
+		copySupersetConfigToWorktree(MAIN_REPO, WORKTREE);
+
+		// Config files should NOT be copied (they create stale overrides)
+		expect(existsSync(join(WORKTREE, ".superset", "config.json"))).toBe(false);
+		expect(existsSync(join(WORKTREE, ".superset", "config.local.json"))).toBe(
+			false,
+		);
+
+		// Other files (like setup scripts) should still be copied
+		expect(existsSync(join(WORKTREE, ".superset", "setup.sh"))).toBe(true);
+	});
+
+	test("stale worktree config does not mask updated main repo run command", () => {
+		// Step 1: User sets initial run command
+		writeFileSync(
+			join(MAIN_REPO, ".superset", "config.json"),
+			JSON.stringify({ run: ["cd xxx && pnpm dev"] }),
+		);
+
+		// Step 2: Worktree is created (copies .superset dir)
+		mkdirSync(WORKTREE, { recursive: true });
+		copySupersetConfigToWorktree(MAIN_REPO, WORKTREE);
+
+		// Step 3: User changes run command in settings (updates main repo only)
+		writeFileSync(
+			join(MAIN_REPO, ".superset", "config.json"),
+			JSON.stringify({ run: ["bun run dev"] }),
+		);
+
+		// Step 4: Resolved config should reflect the updated command, not the stale copy
+		const config = loadSetupConfig({
+			mainRepoPath: MAIN_REPO,
+			worktreePath: WORKTREE,
+		});
+		expect(config?.run).toEqual(["bun run dev"]);
+	});
+
+	test("clearing run command in main repo is not masked by stale worktree config", () => {
+		// This is the exact scenario from the bug report:
+		// User sets run command, it gets cached in worktree, then clearing it has no effect
+		writeFileSync(
+			join(MAIN_REPO, ".superset", "config.json"),
+			JSON.stringify({ setup: ["bun install"], run: ["cd xxx && pnpm dev"] }),
+		);
+
+		mkdirSync(WORKTREE, { recursive: true });
+		copySupersetConfigToWorktree(MAIN_REPO, WORKTREE);
+
+		// User clears the run command
+		writeFileSync(
+			join(MAIN_REPO, ".superset", "config.json"),
+			JSON.stringify({ setup: ["bun install"], run: [] }),
+		);
+
+		const config = loadSetupConfig({
+			mainRepoPath: MAIN_REPO,
+			worktreePath: WORKTREE,
+		});
+		// Should be empty, not the stale "cd xxx && pnpm dev"
+		expect(config?.run).toEqual([]);
 	});
 });
 

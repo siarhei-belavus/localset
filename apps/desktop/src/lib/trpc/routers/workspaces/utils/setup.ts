@@ -1,4 +1,10 @@
-import { cpSync, existsSync, readFileSync } from "node:fs";
+import {
+	cpSync,
+	existsSync,
+	readdirSync,
+	readFileSync,
+	unlinkSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
@@ -8,6 +14,18 @@ import {
 	PROJECTS_DIR_NAME,
 	SUPERSET_DIR_NAME,
 } from "shared/constants";
+
+/**
+ * Files that should not be copied to worktrees. Config files are managed by
+ * the main repo and read via the tiered merge in `loadSetupConfig`. Copying
+ * them into the worktree creates a stale override that masks future edits
+ * made through the settings UI (which writes to the main repo config).
+ */
+const WORKTREE_COPY_EXCLUDE = new Set([
+	CONFIG_FILE_NAME,
+	LOCAL_CONFIG_FILE_NAME,
+]);
+
 import type { LocalSetupConfig, SetupConfig } from "shared/types";
 
 /**
@@ -24,6 +42,15 @@ export function copySupersetConfigToWorktree(
 	if (existsSync(mainSupersetDir) && !existsSync(worktreeSupersetDir)) {
 		try {
 			cpSync(mainSupersetDir, worktreeSupersetDir, { recursive: true });
+
+			// Remove config files from the copy. They are read from the main
+			// repo by `loadSetupConfig` and copying them creates stale overrides
+			// that mask changes made through the settings UI.
+			for (const name of readdirSync(worktreeSupersetDir)) {
+				if (WORKTREE_COPY_EXCLUDE.has(name)) {
+					unlinkSync(join(worktreeSupersetDir, name));
+				}
+			}
 		} catch (error) {
 			console.error(
 				`Failed to copy ${PROJECT_SUPERSET_DIR_NAME} to worktree: ${error instanceof Error ? error.message : String(error)}`,

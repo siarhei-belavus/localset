@@ -1,3 +1,4 @@
+import { TRPCClientError } from "@trpc/client";
 import { Button } from "@superset/ui/button";
 import { Users } from "lucide-react";
 import Image from "next/image";
@@ -8,6 +9,14 @@ import { AcceptInvitationButton } from "./AcceptInvitationButton";
 interface PageProps {
 	params: Promise<{ invitationId: string }>;
 	searchParams: Promise<{ token?: string }>;
+}
+
+function isInvitationNotFoundError(error: unknown) {
+	return (
+		error instanceof TRPCClientError &&
+		(error.data?.code === "NOT_FOUND" ||
+			error.shape?.data?.code === "NOT_FOUND")
+	);
 }
 
 export default async function AcceptInvitationPage({
@@ -30,8 +39,16 @@ export default async function AcceptInvitationPage({
 				invitationId,
 				token,
 			});
-		} catch (_error) {
-			invitation = null;
+		} catch (error) {
+			if (isInvitationNotFoundError(error)) {
+				invitation = null;
+			} else {
+				console.error(
+					"[accept-invitation] Failed to load invitation preview",
+					error,
+				);
+				throw error;
+			}
 		}
 	}
 

@@ -44,8 +44,8 @@ function getInvitationAcceptError(error: unknown) {
 	}
 
 	return {
-		error: error.message || "Failed to accept invitation.",
-		status: 400,
+		error: "Failed to accept invitation.",
+		status: 500,
 	};
 }
 

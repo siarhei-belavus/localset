@@ -14,9 +14,8 @@ const port = Number(process.env.PORT) || 4879;
 
 const server = serve({ fetch: app.fetch, port }, (info) => {
 	console.log(`[host-service] listening on http://localhost:${info.port}`);
-	console.log(`[host-service] Session token: ${sessionToken}`);
 	console.log(
-		`[host-service] Include in requests: Authorization: Bearer ${sessionToken}`,
+		"[host-service] Authentication enabled. Set SESSION_TOKEN explicitly if you need a fixed token for local testing.",
 	);
 });
 injectWebSocket(server);

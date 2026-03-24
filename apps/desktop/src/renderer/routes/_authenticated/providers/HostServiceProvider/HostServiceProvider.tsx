@@ -18,6 +18,7 @@ import { useCollections } from "../CollectionsProvider";
 
 export interface OrgService {
 	port: number;
+	sessionToken: string | null;
 	url: string;
 	client: HostServiceClient;
 }
@@ -80,6 +81,7 @@ export function HostServiceProvider({ children }: { children: ReactNode }) {
 		) => {
 			map.set(orgId, {
 				port,
+				sessionToken: sessionToken ?? null,
 				url: `http://127.0.0.1:${port}`,
 				client: getHostServiceClient(port, sessionToken),
 			});

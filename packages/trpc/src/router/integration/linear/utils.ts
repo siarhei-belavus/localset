@@ -1,7 +1,19 @@
 import { LinearClient } from "@linear/sdk";
 import { db } from "@superset/db/client";
-import { integrationConnections } from "@superset/db/schema";
+import {
+	integrationConnections,
+	type SelectIntegrationConnection,
+} from "@superset/db/schema";
 import { and, eq } from "drizzle-orm";
+import { env } from "../../../env";
+
+const LINEAR_TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
+
+interface LinearTokenResponse {
+	access_token: string;
+	expires_in?: number;
+	refresh_token?: string;
+}
 
 type Priority = "urgent" | "high" | "medium" | "low" | "none";
 
@@ -35,10 +47,64 @@ export function mapPriorityFromLinear(linearPriority: number): Priority {
 	}
 }
 
+function shouldRefreshLinearToken(
+	connection: SelectIntegrationConnection,
+): boolean {
+	if (!connection.refreshToken || !connection.tokenExpiresAt) {
+		return false;
+	}
+
+	return (
+		connection.tokenExpiresAt.getTime() <=
+		Date.now() + LINEAR_TOKEN_REFRESH_BUFFER_MS
+	);
+}
+
+async function refreshLinearConnectionToken(
+	connection: SelectIntegrationConnection,
+): Promise<SelectIntegrationConnection> {
+	const tokenResponse = await fetch("https://api.linear.app/oauth/token", {
+		method: "POST",
+		headers: { "Content-Type": "application/x-www-form-urlencoded" },
+		body: new URLSearchParams({
+			grant_type: "refresh_token",
+			client_id: env.LINEAR_CLIENT_ID,
+			client_secret: env.LINEAR_CLIENT_SECRET,
+			refresh_token: connection.refreshToken ?? "",
+		}),
+	});
+
+	if (!tokenResponse.ok) {
+		throw new Error("Failed to refresh Linear access token");
+	}
+
+	const tokenData = (await tokenResponse.json()) as LinearTokenResponse;
+	const tokenExpiresAt = tokenData.expires_in
+		? new Date(Date.now() + tokenData.expires_in * 1000)
+		: null;
+
+	const [updatedConnection] = await db
+		.update(integrationConnections)
+		.set({
+			accessToken: tokenData.access_token,
+			refreshToken: tokenData.refresh_token ?? connection.refreshToken,
+			tokenExpiresAt,
+			updatedAt: new Date(),
+		})
+		.where(eq(integrationConnections.id, connection.id))
+		.returning();
+
+	if (!updatedConnection) {
+		throw new Error("Failed to persist refreshed Linear token");
+	}
+
+	return updatedConnection;
+}
+
 export async function getLinearClient(
 	organizationId: string,
 ): Promise<LinearClient | null> {
-	const connection = await db.query.integrationConnections.findFirst({
+	let connection = await db.query.integrationConnections.findFirst({
 		where: and(
 			eq(integrationConnections.organizationId, organizationId),
 			eq(integrationConnections.provider, "linear"),
@@ -47,6 +113,14 @@ export async function getLinearClient(
 
 	if (!connection) {
 		return null;
+	}
+
+	if (shouldRefreshLinearToken(connection)) {
+		try {
+			connection = await refreshLinearConnectionToken(connection);
+		} catch (error) {
+			console.error("[linear] Failed to refresh access token:", error);
+		}
 	}
 
 	return new LinearClient({ accessToken: connection.accessToken });

@@ -47,7 +47,7 @@ export async function GET(request: Request) {
 		`${env.NEXT_PUBLIC_API_URL}/api/integrations/linear/callback`,
 	);
 	linearAuthUrl.searchParams.set("response_type", "code");
-	linearAuthUrl.searchParams.set("scope", "read,write,issues:create");
+	linearAuthUrl.searchParams.set("scope", "read,write,issues:create,admin");
 	linearAuthUrl.searchParams.set("state", state);
 
 	return Response.redirect(linearAuthUrl.toString());

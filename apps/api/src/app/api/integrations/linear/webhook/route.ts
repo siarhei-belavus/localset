@@ -13,11 +13,16 @@ import {
 	users,
 	webhookEvents,
 } from "@superset/db/schema";
-import { mapPriorityFromLinear } from "@superset/trpc/integrations/linear";
+import {
+	getLinearClient,
+	mapPriorityFromLinear,
+} from "@superset/trpc/integrations/linear";
 import { and, eq, sql } from "drizzle-orm";
 import { env } from "@/env";
+import { syncWorkflowStates } from "../jobs/initial-sync/syncWorkflowStates";
 
 const webhookClient = new LinearWebhookClient(env.LINEAR_WEBHOOK_SECRET);
+const LINEAR_DELIVERY_HEADER = "Linear-Delivery";
 
 export async function POST(request: Request) {
 	const body = await request.text();
@@ -27,10 +32,18 @@ export async function POST(request: Request) {
 		return Response.json({ error: "Missing signature" }, { status: 401 });
 	}
 
-	const payload = webhookClient.parseData(Buffer.from(body), signature);
+	let payload: ReturnType<typeof webhookClient.parseData>;
+	try {
+		payload = webhookClient.parseData(Buffer.from(body), signature);
+	} catch {
+		return Response.json({ error: "Invalid signature" }, { status: 401 });
+	}
 
 	// Store event with idempotent handling
-	const eventId = `${payload.organizationId}-${payload.webhookTimestamp}`;
+	const deliveryId = request.headers.get(LINEAR_DELIVERY_HEADER);
+	const eventId =
+		deliveryId ??
+		`${payload.webhookId}-${payload.webhookTimestamp}-${payload.type}-${payload.action}`;
 
 	const [webhookEvent] = await db
 		.insert(webhookEvents)
@@ -124,7 +137,7 @@ async function processIssueEvent(
 	const issue = payload.data;
 
 	if (payload.action === "create" || payload.action === "update") {
-		const taskStatus = await db.query.taskStatuses.findFirst({
+		let taskStatus = await db.query.taskStatuses.findFirst({
 			where: and(
 				eq(taskStatuses.organizationId, connection.organizationId),
 				eq(taskStatuses.externalProvider, "linear"),
@@ -133,11 +146,26 @@ async function processIssueEvent(
 		});
 
 		if (!taskStatus) {
-			// TODO(SUPER-237): Handle new workflow states in webhooks by triggering syncWorkflowStates
-			// Currently webhooks silently fail when Linear has new statuses that aren't synced yet.
-			// Should either: (1) trigger workflow state sync and retry, (2) queue for retry, or (3) keep periodic sync only
+			const linearClient = await getLinearClient(connection.organizationId);
+			if (linearClient) {
+				await syncWorkflowStates({
+					client: linearClient,
+					organizationId: connection.organizationId,
+				});
+
+				taskStatus = await db.query.taskStatuses.findFirst({
+					where: and(
+						eq(taskStatuses.organizationId, connection.organizationId),
+						eq(taskStatuses.externalProvider, "linear"),
+						eq(taskStatuses.externalId, issue.state.id),
+					),
+				});
+			}
+		}
+
+		if (!taskStatus) {
 			console.warn(
-				`[webhook] Status not found for state ${issue.state.id}, skipping update`,
+				`[linear/webhook] Status not found for state ${issue.state.id}, skipping update`,
 			);
 			return "skipped";
 		}

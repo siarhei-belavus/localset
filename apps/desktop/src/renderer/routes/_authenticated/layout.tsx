@@ -8,7 +8,6 @@ import {
 	useLocation,
 	useNavigate,
 } from "@tanstack/react-router";
-import { useFeatureFlagEnabled } from "renderer/lib/feature-flags";
 import { useEffect, useRef } from "react";
 import { DndProvider } from "react-dnd";
 import { HiOutlineWifi } from "react-icons/hi2";
@@ -20,6 +19,7 @@ import { useOnlineStatus } from "renderer/hooks/useOnlineStatus";
 import { authClient, getAuthToken } from "renderer/lib/auth-client";
 import { dragDropManager } from "renderer/lib/dnd";
 import { electronTrpc } from "renderer/lib/electron-trpc";
+import { useFeatureFlagEnabled } from "renderer/lib/feature-flags";
 import { showWorkspaceAutoNameWarningToast } from "renderer/lib/workspaces/showWorkspaceAutoNameWarningToast";
 import { InitGitDialog } from "renderer/react-query/projects/InitGitDialog";
 import { DashboardNewWorkspaceModal } from "renderer/routes/_authenticated/components/DashboardNewWorkspaceModal";

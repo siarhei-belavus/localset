@@ -90,7 +90,6 @@ export default defineConfig({
 					dir: resolve(devPath, "main"),
 				},
 				external: ["electron", ...mainExternalizedDependencies],
-				plugins: [sentryPlugin].filter(Boolean),
 			},
 		},
 		resolve: {

@@ -9,7 +9,6 @@ import {
 } from "@superset/ui/card";
 import { Skeleton } from "@superset/ui/skeleton";
 import { useLiveQuery } from "@tanstack/react-db";
-import { useFeatureFlagEnabled } from "renderer/lib/feature-flags";
 import { useCallback, useEffect, useState } from "react";
 import { FaGithub, FaSlack } from "react-icons/fa";
 import { HiCheckCircle, HiOutlineArrowTopRightOnSquare } from "react-icons/hi2";
@@ -18,6 +17,7 @@ import { GATED_FEATURES, usePaywall } from "renderer/components/Paywall";
 import { env } from "renderer/env.renderer";
 import { apiTrpcClient } from "renderer/lib/api-trpc-client";
 import { authClient } from "renderer/lib/auth-client";
+import { useFeatureFlagEnabled } from "renderer/lib/feature-flags";
 import { useCollections } from "renderer/routes/_authenticated/providers/CollectionsProvider";
 import {
 	isItemVisible,

@@ -545,8 +545,15 @@ export function requestPaneClose(paneId: string): boolean {
 	}
 
 	if (pane.type !== "file-viewer") {
-		useTabsStore.getState().removePane(paneId);
-		return true;
+		// Show confirmation dialog instead of immediately removing the pane.
+		// This prevents accidental Cmd+W from destroying terminal sessions,
+		// chat conversations, or browser tabs with no way to recover. (issue #2877)
+		useEditorSessionsStore.getState().setPendingPaneClose({
+			paneId,
+			paneType: pane.type,
+			paneName: pane.name,
+		});
+		return false;
 	}
 
 	const session = useEditorSessionsStore.getState().sessions[paneId];
@@ -564,6 +571,18 @@ export function requestPaneClose(paneId: string): boolean {
 
 	useTabsStore.getState().removePane(paneId);
 	return true;
+}
+
+export function confirmPaneClose(): void {
+	const pending = useEditorSessionsStore.getState().pendingPaneClose;
+	if (!pending) return;
+
+	useEditorSessionsStore.getState().setPendingPaneClose(null);
+	useTabsStore.getState().removePane(pending.paneId);
+}
+
+export function cancelPendingPaneClose(): void {
+	useEditorSessionsStore.getState().setPendingPaneClose(null);
 }
 
 export function requestPreviewReplacement(

@@ -48,6 +48,12 @@ export interface PendingTabCloseState {
 	isSaving: boolean;
 }
 
+export interface PendingPaneCloseState {
+	paneId: string;
+	paneType: string;
+	paneName: string;
+}
+
 export type EditorSaveResult =
 	| { status: "saved" }
 	| {

@@ -20,6 +20,7 @@ import {
 	KeywordSearch,
 	useKeywordSearch,
 } from "renderer/screens/main/components/KeywordSearch";
+import { ClosePaneDialog } from "renderer/screens/main/components/WorkspaceView/ContentView/TabsContent/TabView/ClosePaneDialog";
 import { UnsavedChangesDialog } from "renderer/screens/main/components/WorkspaceView/ContentView/TabsContent/TabView/FileViewerPane/UnsavedChangesDialog";
 import { useWorkspaceFileEventBridge } from "renderer/screens/main/components/WorkspaceView/hooks/useWorkspaceFileEvents";
 import { useWorkspaceRenameReconciliation } from "renderer/screens/main/components/WorkspaceView/hooks/useWorkspaceRenameReconciliation";
@@ -27,7 +28,9 @@ import { WorkspaceInitializingView } from "renderer/screens/main/components/Work
 import { WorkspaceLayout } from "renderer/screens/main/components/WorkspaceView/WorkspaceLayout";
 import { useCreateOrOpenPR, usePRStatus } from "renderer/screens/main/hooks";
 import {
+	cancelPendingPaneClose,
 	cancelPendingTabClose,
+	confirmPaneClose,
 	discardAndClosePendingTab,
 	requestPaneClose,
 	requestTabClose,
@@ -193,6 +196,7 @@ function WorkspacePage() {
 	const pendingTabClose = useEditorSessionsStore((s) =>
 		s.pendingTabClose?.workspaceId === workspaceId ? s.pendingTabClose : null,
 	);
+	const pendingPaneClose = useEditorSessionsStore((s) => s.pendingPaneClose);
 
 	const { toggleWorkspaceRun } = useWorkspaceRunCommand({
 		workspaceId,
@@ -692,6 +696,17 @@ function WorkspacePage() {
 				isLoading={keywordSearch.isFetching}
 				searchResults={keywordSearch.searchResults}
 				onSelectMatch={keywordSearch.selectMatch}
+			/>
+			<ClosePaneDialog
+				open={pendingPaneClose !== null}
+				onOpenChange={(open) => {
+					if (!open) {
+						cancelPendingPaneClose();
+					}
+				}}
+				onConfirm={confirmPaneClose}
+				paneName={pendingPaneClose?.paneName ?? ""}
+				paneType={pendingPaneClose?.paneType ?? "terminal"}
 			/>
 			<UnsavedChangesDialog
 				open={pendingTabClose !== null}

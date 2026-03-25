@@ -12,7 +12,10 @@ export function useUpdateProject(
 	return electronTrpc.projects.update.useMutation({
 		...options,
 		onSuccess: async (...args) => {
+			const [, variables] = args;
+
 			await Promise.all([
+				utils.projects.get.invalidate({ id: variables.id }),
 				utils.projects.getRecents.invalidate(),
 				utils.workspaces.getAllGrouped.invalidate(),
 			]);

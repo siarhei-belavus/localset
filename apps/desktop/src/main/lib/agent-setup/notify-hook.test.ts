@@ -20,5 +20,6 @@ describe("getNotifyScriptContent", () => {
 		expect(script).toContain(
 			"event=$EVENT_TYPE sessionId=$SESSION_ID hookSessionId=$HOOK_SESSION_ID resourceId=$RESOURCE_ID",
 		);
+		expect(script).toContain('"eventType"[[:space:]]*:[[:space:]]*"[^"]*"');
 	});
 });

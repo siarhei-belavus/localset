@@ -9,7 +9,7 @@ import {
 } from "@superset/ui/card";
 import { Skeleton } from "@superset/ui/skeleton";
 import { useLiveQuery } from "@tanstack/react-db";
-import { useFeatureFlagEnabled } from "posthog-js/react";
+import { useFeatureFlagEnabled } from "renderer/lib/feature-flags";
 import { useCallback, useEffect, useState } from "react";
 import { FaGithub, FaSlack } from "react-icons/fa";
 import { HiCheckCircle, HiOutlineArrowTopRightOnSquare } from "react-icons/hi2";

@@ -22,7 +22,6 @@ export const env = createEnv({
 		STRIPE_PRO_MONTHLY_PRICE_ID: z.string(),
 		STRIPE_PRO_YEARLY_PRICE_ID: z.string(),
 		SLACK_BILLING_WEBHOOK_URL: z.string().url(),
-		SENTRY_AUTH_TOKEN: z.string().optional(),
 		ANTHROPIC_API_KEY: z.string(),
 	},
 
@@ -31,12 +30,6 @@ export const env = createEnv({
 		NEXT_PUBLIC_WEB_URL: z.string().url(),
 		NEXT_PUBLIC_MARKETING_URL: z.string().url(),
 		NEXT_PUBLIC_DOCS_URL: z.string().url(),
-		NEXT_PUBLIC_POSTHOG_KEY: z.string(),
-		NEXT_PUBLIC_POSTHOG_HOST: z.string().url(),
-		NEXT_PUBLIC_SENTRY_DSN_WEB: z.string().optional(),
-		NEXT_PUBLIC_SENTRY_ENVIRONMENT: z
-			.enum(["development", "preview", "production"])
-			.optional(),
 	},
 
 	experimental__runtimeEnv: {
@@ -45,10 +38,6 @@ export const env = createEnv({
 		NEXT_PUBLIC_WEB_URL: process.env.NEXT_PUBLIC_WEB_URL,
 		NEXT_PUBLIC_MARKETING_URL: process.env.NEXT_PUBLIC_MARKETING_URL,
 		NEXT_PUBLIC_DOCS_URL: process.env.NEXT_PUBLIC_DOCS_URL,
-		NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY,
-		NEXT_PUBLIC_POSTHOG_HOST: process.env.NEXT_PUBLIC_POSTHOG_HOST,
-		NEXT_PUBLIC_SENTRY_DSN_WEB: process.env.NEXT_PUBLIC_SENTRY_DSN_WEB,
-		NEXT_PUBLIC_SENTRY_ENVIRONMENT: process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT,
 	},
 
 	skipValidation: !!process.env.SKIP_ENV_VALIDATION,

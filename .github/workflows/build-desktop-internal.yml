@@ -1,0 +1,76 @@
+name: Build Desktop Internal
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-macos-internal:
+    name: Build Internal DMG (macOS)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.2"
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}-
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install --frozen --ignore-scripts
+
+      - name: Install desktop native dependencies
+        working-directory: apps/desktop
+        run: bun run install:deps
+
+      - name: Clean dev folder
+        working-directory: apps/desktop
+        run: bun run clean:dev
+
+      - name: Generate file icons
+        working-directory: apps/desktop
+        run: bun run generate:icons
+
+      - name: Compile app with electron-vite
+        working-directory: apps/desktop
+        env:
+          SKIP_ENV_VALIDATION: "1"
+          SUPERSET_WORKSPACE_NAME: internal
+        run: bun run compile:app
+
+      - name: Copy native runtime modules
+        working-directory: apps/desktop
+        run: bun run copy:native-modules && bun run validate:native-runtime
+
+      - name: Package unsigned internal desktop app
+        working-directory: apps/desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: bunx electron-builder --publish never --config electron-builder.internal.ts
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-internal-mac-dmg
+          path: apps/desktop/release/*.dmg
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-internal-mac-zip
+          path: apps/desktop/release/*.zip
+          retention-days: 14
+          if-no-files-found: error

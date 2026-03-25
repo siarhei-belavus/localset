@@ -1,5 +1,4 @@
 import { join } from "node:path";
-import { withSentryConfig } from "@sentry/nextjs";
 import { config as dotenvConfig } from "dotenv";
 import type { NextConfig } from "next";
 
@@ -23,11 +22,6 @@ const contentSecurityPolicy = [
 	[
 		"connect-src 'self'",
 		apiOrigin,
-		"https://*.ingest.sentry.io",
-		"https://*.sentry.io",
-		"https://us.i.posthog.com",
-		"https://us-assets.i.posthog.com",
-		"https://us.posthog.com",
 		!isProduction && "ws:",
 		!isProduction && "wss:",
 	]
@@ -89,23 +83,6 @@ const config: NextConfig = {
 		],
 	},
 
-	async rewrites() {
-		return [
-			{
-				source: "/ingest/static/:path*",
-				destination: "https://us-assets.i.posthog.com/static/:path*",
-			},
-			{
-				source: "/ingest/:path*",
-				destination: "https://us.i.posthog.com/:path*",
-			},
-			{
-				source: "/ingest/decide",
-				destination: "https://us.i.posthog.com/decide",
-			},
-		];
-	},
-
 	async headers() {
 		return [
 			{
@@ -118,13 +95,4 @@ const config: NextConfig = {
 	skipTrailingSlashRedirect: true,
 };
 
-export default withSentryConfig(config, {
-	org: "superset-sh",
-	project: "web",
-	silent: !process.env.CI,
-	authToken: process.env.SENTRY_AUTH_TOKEN,
-	widenClientFileUpload: true,
-	tunnelRoute: "/monitoring",
-	disableLogger: true,
-	automaticVercelMonitors: true,
-});
+export default config;

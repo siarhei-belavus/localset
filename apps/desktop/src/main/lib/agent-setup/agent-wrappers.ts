@@ -67,3 +67,12 @@ export {
 	getMastraGlobalHooksJsonPath,
 	getMastraHooksJsonContent,
 } from "./agent-wrappers-mastra";
+export {
+	buildPiWrapperExecLine,
+	createPiExtension,
+	createPiWrapper,
+	getPiExtensionContent,
+	getPiExtensionPath,
+	PI_EXTENSION_FILE,
+	PI_EXTENSION_MARKER,
+} from "./agent-wrappers-pi";

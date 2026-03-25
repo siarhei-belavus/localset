@@ -801,7 +801,7 @@ export const createSettingsRouter = () => {
 
 		// TODO: remove telemetry procedures once telemetry_enabled column is dropped
 		getTelemetryEnabled: publicProcedure.query(() => {
-			return true;
+			return false;
 		}),
 
 		setTelemetryEnabled: publicProcedure

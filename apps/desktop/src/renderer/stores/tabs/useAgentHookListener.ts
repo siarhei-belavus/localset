@@ -50,21 +50,52 @@ export function useAgentHookListener() {
 
 			const state = useTabsStore.getState();
 			const target = resolveNotificationTarget(event.data, state);
-			if (!target) return;
+			console.log("[agent-hooks] subscription event", {
+				type: event.type,
+				data: event.data,
+				target,
+			});
+			if (!target) {
+				console.log("[agent-hooks] unresolved notification target", {
+					type: event.type,
+					data: event.data,
+				});
+				return;
+			}
 
 			const { paneId, workspaceId } = target;
 
 			if (event.type === NOTIFICATION_EVENTS.AGENT_LIFECYCLE) {
-				if (!paneId) return;
+				if (!paneId) {
+					console.log("[agent-hooks] missing paneId for lifecycle event", {
+						event,
+						target,
+					});
+					return;
+				}
 
 				const lifecycleEvent = event.data;
 				if (!lifecycleEvent) return;
 
 				const { eventType } = lifecycleEvent;
+				console.log("[agent-hooks] applying lifecycle event", {
+					paneId,
+					workspaceId,
+					eventType,
+					lifecycleEvent,
+				});
 
 				if (eventType === "Start") {
+					console.log("[agent-hooks] setPaneStatus", {
+						paneId,
+						status: "working",
+					});
 					state.setPaneStatus(paneId, "working");
 				} else if (eventType === "PermissionRequest") {
+					console.log("[agent-hooks] setPaneStatus", {
+						paneId,
+						status: "permission",
+					});
 					state.setPaneStatus(paneId, "permission");
 				} else if (eventType === "Stop") {
 					const activeTabId = state.activeTabIds[workspaceId];
@@ -81,6 +112,10 @@ export function useAgentHookListener() {
 						willSetTo: isInActiveTab ? "idle" : "review",
 					});
 
+					console.log("[agent-hooks] setPaneStatus", {
+						paneId,
+						status: isInActiveTab ? "idle" : "review",
+					});
 					state.setPaneStatus(paneId, isInActiveTab ? "idle" : "review");
 				}
 			} else if (event.type === NOTIFICATION_EVENTS.TERMINAL_EXIT) {

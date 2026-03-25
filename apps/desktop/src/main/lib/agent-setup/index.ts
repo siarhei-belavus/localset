@@ -19,6 +19,8 @@ import {
 	createMastraWrapper,
 	createOpenCodePlugin,
 	createOpenCodeWrapper,
+	createPiExtension,
+	createPiWrapper,
 } from "./agent-wrappers";
 import { createNotifyScript } from "./notify-hook";
 import {
@@ -66,6 +68,8 @@ export function setupAgentHooks(): void {
 	createMastraHooksJson();
 	createCopilotHookScript();
 	createCopilotWrapper();
+	createPiExtension();
+	createPiWrapper();
 
 	createZshWrapper();
 	createBashWrapper();

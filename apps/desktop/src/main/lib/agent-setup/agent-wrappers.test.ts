@@ -58,6 +58,7 @@ mock.module("node:os", () => ({
 const {
 	buildCodexWrapperExecLine,
 	buildCopilotWrapperExecLine,
+	buildPiWrapperExecLine,
 	buildWrapperScript,
 	createClaudeSettingsJson,
 	createCodexHooksJson,
@@ -65,6 +66,8 @@ const {
 	createDroidSettingsJson,
 	createDroidWrapper,
 	createMastraWrapper,
+	createPiExtension,
+	createPiWrapper,
 	getClaudeGlobalSettingsJsonContent,
 	getClaudeManagedHookCommand,
 	getCodexGlobalHooksJsonContent,
@@ -73,6 +76,8 @@ const {
 	getDroidSettingsJsonContent,
 	getGeminiSettingsJsonContent,
 	getMastraHooksJsonContent,
+	getPiExtensionContent,
+	getPiExtensionPath,
 } = await import("./agent-wrappers");
 const { reconcileManagedEntries } = await import("./agent-wrappers-common");
 
@@ -229,6 +234,43 @@ describe("agent-wrappers copilot", () => {
 		expect(wrapper).toContain("# Superset wrapper for droid");
 		expect(wrapper).toContain('REAL_BIN="$(find_real_binary "droid")"');
 		expect(wrapper).toContain('exec "$REAL_BIN" "$@"');
+	});
+
+	it("creates pi extension and wrapper with Superset lifecycle injection", () => {
+		createPiExtension();
+		createPiWrapper();
+
+		const extensionPath = getPiExtensionPath();
+		const extension = readFileSync(extensionPath, "utf-8");
+		const wrapperPath = path.join(TEST_BIN_DIR, "pi");
+		const wrapper = readFileSync(wrapperPath, "utf-8");
+
+		expect(extension).toContain("// Superset pi extension v1");
+		expect(extension).toContain('const notifyPath = "/');
+		expect(extension).toContain('pi.on("agent_start"');
+		expect(extension).toContain('pi.on("agent_end"');
+		expect(extension).toContain("JSON.stringify({ eventType })");
+		expect(extension).toContain(path.join(TEST_HOOKS_DIR, "notify.sh"));
+
+		expect(wrapper).toContain("# Superset wrapper for pi");
+		expect(wrapper).toContain('REAL_BIN="$(find_real_binary "pi")"');
+		expect(wrapper).toContain(`exec "$REAL_BIN" -e "${extensionPath}" "$@"`);
+		expect(wrapper).toContain('exec "$REAL_BIN" "$@"');
+
+		const execLine = buildPiWrapperExecLine();
+		expect(execLine).toContain(`-e "${extensionPath}"`);
+		expect(execLine).toContain('exec "$REAL_BIN" "$@"');
+	});
+
+	it("renders pi extension content with notify hook path", () => {
+		const content = getPiExtensionContent(
+			path.join(TEST_HOOKS_DIR, "notify.sh"),
+		);
+
+		expect(content).toContain("// Superset pi extension v1");
+		expect(content).toContain(
+			`const notifyPath = ${JSON.stringify(path.join(TEST_HOOKS_DIR, "notify.sh"))};`,
+		);
 	});
 
 	it("replaces stale Cursor hook commands from old superset paths", () => {

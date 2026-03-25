@@ -115,9 +115,11 @@ app.get("/hook/complete", (req, res) => {
 			hookSessionId: hookSessionId as string | undefined,
 			resourceId: resourceId as string | undefined,
 			resolvedPaneId,
+			event,
 		});
 	}
 
+	console.log("[notifications] emitting AGENT_LIFECYCLE", event);
 	notificationsEmitter.emit(NOTIFICATION_EVENTS.AGENT_LIFECYCLE, event);
 
 	res.json({ success: true, paneId: resolvedPaneId, tabId });

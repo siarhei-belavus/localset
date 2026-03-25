@@ -65,6 +65,15 @@ const config: Configuration = {
 			to: "resources/host-migrations",
 			filter: ["**/*"],
 		},
+		// Include licensing + modification notices with packaged builds.
+		{
+			from: "../../LICENSE.md",
+			to: "legal/LICENSE.md",
+		},
+		{
+			from: "MODIFIED_BUILD_NOTICE.md",
+			to: "legal/MODIFIED_BUILD_NOTICE.md",
+		},
 	],
 
 	files: [

@@ -43,7 +43,6 @@ export const env = createEnv({
 		STRIPE_PRO_YEARLY_PRICE_ID: z.string(),
 		SLACK_BILLING_WEBHOOK_URL: z.string().url(),
 		SECRETS_ENCRYPTION_KEY: z.string().min(1),
-		SENTRY_AUTH_TOKEN: z.string().optional(),
 		DURABLE_STREAMS_URL: z.string().url(),
 		DURABLE_STREAMS_SECRET: z.string().min(1),
 		TAVILY_API_KEY: z.string().optional(),
@@ -53,12 +52,6 @@ export const env = createEnv({
 		NEXT_PUBLIC_WEB_URL: z.string().url(),
 		NEXT_PUBLIC_ADMIN_URL: z.string().url(),
 		NEXT_PUBLIC_DESKTOP_URL: z.string().url().optional(),
-		NEXT_PUBLIC_POSTHOG_KEY: z.string().min(1),
-		NEXT_PUBLIC_POSTHOG_HOST: z.string().url(),
-		NEXT_PUBLIC_SENTRY_DSN_API: z.string().optional(),
-		NEXT_PUBLIC_SENTRY_ENVIRONMENT: z
-			.enum(["development", "preview", "production"])
-			.optional(),
 	},
 	experimental__runtimeEnv: {
 		NODE_ENV: process.env.NODE_ENV,
@@ -66,10 +59,6 @@ export const env = createEnv({
 		NEXT_PUBLIC_WEB_URL: process.env.NEXT_PUBLIC_WEB_URL,
 		NEXT_PUBLIC_ADMIN_URL: process.env.NEXT_PUBLIC_ADMIN_URL,
 		NEXT_PUBLIC_DESKTOP_URL: process.env.NEXT_PUBLIC_DESKTOP_URL,
-		NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY,
-		NEXT_PUBLIC_POSTHOG_HOST: process.env.NEXT_PUBLIC_POSTHOG_HOST,
-		NEXT_PUBLIC_SENTRY_DSN_API: process.env.NEXT_PUBLIC_SENTRY_DSN_API,
-		NEXT_PUBLIC_SENTRY_ENVIRONMENT: process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT,
 	},
 	emptyStringAsUndefined: true,
 	skipValidation: !!process.env.SKIP_ENV_VALIDATION,

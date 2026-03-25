@@ -22,9 +22,13 @@ SESSION_ID=${RESOURCE_ID:-$HOOK_SESSION_ID}
 # Skip if this isn't a Superset terminal hook and no Mastra session context exists
 [ -z "$SUPERSET_TAB_ID" ] && [ -z "$SESSION_ID" ] && exit 0
 
-# Extract event type - Claude uses "hook_event_name", Codex uses "type"
+# Extract event type - Claude uses "hook_event_name", Codex uses "type",
+# Pi extension sends canonical "eventType" directly.
 # Use flexible pattern to handle optional whitespace: "key": "value" or "key":"value"
 EVENT_TYPE=$(echo "$INPUT" | grep -oE '"hook_event_name"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -oE '"[^"]*"$' | tr -d '"')
+if [ -z "$EVENT_TYPE" ]; then
+  EVENT_TYPE=$(echo "$INPUT" | grep -oE '"eventType"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -oE '"[^"]*"$' | tr -d '"')
+fi
 if [ -z "$EVENT_TYPE" ]; then
   # Check for Codex "type" field (e.g., "agent-turn-complete")
   CODEX_TYPE=$(echo "$INPUT" | grep -oE '"type"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -oE '"[^"]*"$' | tr -d '"')

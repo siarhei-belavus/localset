@@ -41,6 +41,9 @@ export interface GraphQLPullRequestNode {
 			nodes: GraphQLCheckContextNode[];
 		} | null;
 	} | null;
+	mergeQueueEntry: {
+		position: number | null;
+	} | null;
 }
 
 export interface PullRequestsGraphQLResult {

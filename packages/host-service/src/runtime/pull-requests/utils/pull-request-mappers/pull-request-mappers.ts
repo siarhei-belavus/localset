@@ -3,7 +3,12 @@ import type {
 	GraphQLPullRequestNode,
 } from "../github-query";
 
-export type PullRequestState = "open" | "draft" | "merged" | "closed";
+export type PullRequestState =
+	| "open"
+	| "draft"
+	| "merged"
+	| "closed"
+	| "queued";
 export type ReviewDecision =
 	| "approved"
 	| "changes_requested"
@@ -21,10 +26,12 @@ export interface PullRequestCheck {
 export function mapPullRequestState(
 	state: GraphQLPullRequestNode["state"],
 	isDraft: boolean,
+	mergeQueueEntry?: GraphQLPullRequestNode["mergeQueueEntry"],
 ): PullRequestState {
 	if (state === "MERGED") return "merged";
 	if (state === "CLOSED") return "closed";
 	if (isDraft) return "draft";
+	if (mergeQueueEntry) return "queued";
 	return "open";
 }
 
@@ -88,7 +95,12 @@ export function computeChecksStatus(checks: PullRequestCheck[]): ChecksStatus {
 }
 
 export function coercePullRequestState(value: string | null): PullRequestState {
-	if (value === "merged" || value === "closed" || value === "draft") {
+	if (
+		value === "merged" ||
+		value === "closed" ||
+		value === "draft" ||
+		value === "queued"
+	) {
 		return value;
 	}
 	return "open";

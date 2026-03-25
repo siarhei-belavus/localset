@@ -153,6 +153,19 @@ export const GHPRResponseSchema = z.object({
 		.nullable(),
 	// statusCheckRollup is an array directly, not { contexts: [...] }
 	statusCheckRollup: z.array(GHCheckContextSchema).nullable(),
+	autoMergeRequest: z
+		.object({
+			enabledAt: z.string().optional(),
+			mergeMethod: z.string().optional(),
+		})
+		.nullable()
+		.optional(),
+	mergeQueueEntry: z
+		.object({
+			position: z.number().optional(),
+		})
+		.nullable()
+		.optional(),
 	comments: z.array(GHCommentSchema).nullable().optional(),
 	reviewRequests: z.array(GHReviewRequestSchema).nullable().optional(),
 });

@@ -9,7 +9,7 @@ import {
 } from "./types";
 
 const PR_JSON_FIELDS =
-	"number,title,url,state,isDraft,mergedAt,additions,deletions,headRefOid,headRefName,headRepository,headRepositoryOwner,isCrossRepository,reviewDecision,statusCheckRollup,reviewRequests";
+	"number,title,url,state,isDraft,mergedAt,additions,deletions,headRefOid,headRefName,headRepository,headRepositoryOwner,isCrossRepository,reviewDecision,statusCheckRollup,reviewRequests,autoMergeRequest,mergeQueueEntry";
 
 export async function getPRForBranch(
 	worktreePath: string,
@@ -328,7 +328,7 @@ function formatPRData(data: GHPRResponse): NonNullable<GitHubStatus["pr"]> {
 		number: data.number,
 		title: data.title,
 		url: data.url,
-		state: mapPRState(data.state, data.isDraft),
+		state: mapPRState(data.state, data.isDraft, data.mergeQueueEntry),
 		mergedAt: data.mergedAt ? new Date(data.mergedAt).getTime() : undefined,
 		additions: data.additions,
 		deletions: data.deletions,
@@ -353,10 +353,12 @@ function parseReviewRequests(
 function mapPRState(
 	state: GHPRResponse["state"],
 	isDraft: boolean,
+	mergeQueueEntry?: GHPRResponse["mergeQueueEntry"],
 ): NonNullable<GitHubStatus["pr"]>["state"] {
 	if (state === "MERGED") return "merged";
 	if (state === "CLOSED") return "closed";
 	if (isDraft) return "draft";
+	if (mergeQueueEntry) return "queued";
 	return "open";
 }
 

@@ -122,16 +122,13 @@ const config: Configuration = {
 			CFBundleName: productName,
 			CFBundleDisplayName: productName,
 			// Required for macOS microphone permission prompt
-			NSMicrophoneUsageDescription:
-				`${productName} needs microphone access so voice-enabled tools like Codex transcription can capture audio input.`,
+			NSMicrophoneUsageDescription: `${productName} needs microphone access so voice-enabled tools like Codex transcription can capture audio input.`,
 			// Required for macOS local network permission prompt
-			NSLocalNetworkUsageDescription:
-				`${productName} needs access to your local network to discover and connect to development servers running on your network.`,
+			NSLocalNetworkUsageDescription: `${productName} needs access to your local network to discover and connect to development servers running on your network.`,
 			// Bonjour service types to browse for (triggers the permission prompt)
 			NSBonjourServices: ["_http._tcp", "_https._tcp"],
 			// Required for Apple Events / Automation permission prompt
-			NSAppleEventsUsageDescription:
-				`${productName} needs to interact with other applications to run terminal commands and development tools.`,
+			NSAppleEventsUsageDescription: `${productName} needs to interact with other applications to run terminal commands and development tools.`,
 		},
 	},
 

@@ -215,7 +215,11 @@ export function setupAutoUpdater(): void {
 		!IS_AUTO_UPDATE_PLATFORM ||
 		!UPDATE_FEED_URL
 	) {
-		if (env.NODE_ENV !== "development" && IS_AUTO_UPDATE_PLATFORM && !UPDATE_FEED_URL) {
+		if (
+			env.NODE_ENV !== "development" &&
+			IS_AUTO_UPDATE_PLATFORM &&
+			!UPDATE_FEED_URL
+		) {
 			console.info(
 				`[auto-updater] Disabled: no fork update feed configured for ${DESKTOP_DISTRIBUTION.productName}`,
 			);

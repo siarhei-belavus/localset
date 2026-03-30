@@ -259,12 +259,32 @@ if [ "${CURRENT_VERSION}" != "${VERSION}" ]; then
 	git push -u origin "${RELEASE_BRANCH}"
 
 	info "Creating version-bump PR..."
-	PR_URL=$(gh pr create \
-		--repo "${REPO}" \
-		--title "chore(desktop): bump version to ${VERSION}" \
-		--body "Bumps the Localset desktop app version to ${VERSION} before tagging the release." \
-		--base main \
-		--head "${RELEASE_BRANCH}")
+	PR_URL=""
+	PR_CREATE_RETRIES=6
+	PR_CREATE_ATTEMPT=1
+	while [ "${PR_CREATE_ATTEMPT}" -le "${PR_CREATE_RETRIES}" ]; do
+		set +e
+		PR_URL=$(gh pr create \
+			--repo "${REPO}" \
+			--title "chore(desktop): bump version to ${VERSION}" \
+			--body "Bumps the Localset desktop app version to ${VERSION} before tagging the release." \
+			--base main \
+			--head "${RELEASE_BRANCH}" 2>&1)
+		PR_CREATE_EXIT=$?
+		set -e
+
+		if [ "${PR_CREATE_EXIT}" -eq 0 ]; then
+			break
+		fi
+
+		if [ "${PR_CREATE_ATTEMPT}" -eq "${PR_CREATE_RETRIES}" ]; then
+			error "Could not create version-bump PR after ${PR_CREATE_RETRIES} attempts: ${PR_URL}"
+		fi
+
+		echo "  Waiting for GitHub to recognize ${RELEASE_BRANCH}... (attempt ${PR_CREATE_ATTEMPT}/${PR_CREATE_RETRIES})"
+		sleep 3
+		PR_CREATE_ATTEMPT=$((PR_CREATE_ATTEMPT + 1))
+	done
 	PR_NUMBER=$(echo "${PR_URL}" | grep -oE '[0-9]+$')
 	success "Created PR #${PR_NUMBER}"
 

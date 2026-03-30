@@ -104,6 +104,8 @@ If you are preparing a public or customer-facing fork, also review `apps/desktop
 
 When building for release, make sure `node-pty` is built for the correct architecture with `bun run install:deps`, then run `bun run release`.
 
+For the Localset fork's actual version bump, PR, tag, and release workflow, follow `apps/desktop/RELEASE.md`.
+
 # Linux (AppImage) local build
 
 From `apps/desktop`:

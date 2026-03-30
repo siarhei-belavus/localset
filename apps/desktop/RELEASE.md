@@ -1,5 +1,7 @@
 # Desktop App Release Process
 
+This file is the source of truth for Localset desktop release work in this fork.
+
 ## Quick Start
 
 From the monorepo root:
@@ -9,11 +11,12 @@ From the monorepo root:
 ```
 
 The script will:
-1. Show current version and prompt for new version (patch/minor/major/custom)
-2. Update `package.json` version
-3. Create and push a `desktop-v<version>` tag for the default unsigned release workflow
-4. Monitor the GitHub Actions build
-5. Create a **draft release** for review
+1. Show the current desktop version and prompt for a new version if needed
+2. Create a tiny version-bump PR when `apps/desktop/package.json` needs updating
+3. Merge that PR before tagging the release
+4. Create and push the release tag from `main`
+5. Monitor the GitHub Actions build
+6. Create a **draft release** for review
 
 ### Options
 
@@ -27,6 +30,9 @@ The script will:
 # Auto-publish (skip draft)
 ./apps/desktop/create-release.sh --publish
 ./apps/desktop/create-release.sh 0.0.50 --publish
+
+# Signed release path
+./apps/desktop/create-release.sh 0.0.50 --signed
 ```
 
 To publish a draft:
@@ -35,10 +41,39 @@ To publish a draft:
 gh release edit desktop-v0.0.50 --draft=false
 ```
 
+## Availability
+
+A successful build does not make the release public by itself.
+
+- draft release: artifacts are uploaded, but the release is not publicly available yet
+- published release: the release is visible on GitHub and can be used through `releases/latest` download URLs
+
+For Localset's normal unsigned flow, the last step is publishing the draft release:
+
+```bash
+gh release edit desktop-v<version> --draft=false
+```
+
 ### Requirements
 
 - GitHub CLI (`gh`) installed and authenticated
 - Clean git working directory
+
+## Localset Fork Workflow
+
+For this fork, the script above is the preferred release entrypoint.
+
+Default path today:
+
+- use the unsigned `desktop-v<version>` channel for Localset releases
+- treat unsigned macOS as manual-update-only
+- use `--signed` only for explicit signed release work
+
+Important guardrail:
+
+- the release workflow builds from `apps/desktop/package.json`
+- the tag name alone does not update the app version
+- if the version needs to change, `create-release.sh` now creates and merges the version-bump PR before tagging
 
 ## Modified Fork Releases
 
@@ -73,15 +108,21 @@ If you want in-app auto-updates on macOS, publish from the signed `desktop-signe
 If you prefer not to use the script:
 
 ```bash
+git switch main
+git pull --ff-only origin main
 git tag desktop-v1.0.0
 git push origin desktop-v1.0.0
 ```
 
 This creates a draft release. Publish it manually at GitHub Releases.
 
+Before tagging manually, verify that `apps/desktop/package.json` already matches the release version you are tagging and that you are tagging from `main`.
+
 For a future signed release:
 
 ```bash
+git switch main
+git pull --ff-only origin main
 git tag desktop-signed-v1.0.0
 git push origin desktop-signed-v1.0.0
 ```
@@ -97,10 +138,7 @@ The app checks for updates at launch and every x hours using:
 
 The workflow creates stable-named copies (without version) so these URLs always point to the latest build.
 
-If you are publishing a fork, review the auto-update settings before release. The default configuration points to the upstream `superset-sh/superset` GitHub releases. A forked build should either:
-
-- publish to its own release feed, or
-- disable auto-update until a fork-specific feed is configured
+If you are publishing a fork, review the auto-update settings before release. Localset should publish to its own GitHub release feed and should not rely on upstream Superset release URLs.
 
 ## Code Signing
 
@@ -129,6 +167,7 @@ Linux output should include:
 
 ## Troubleshooting
 
+- **Tagged the next version but the app still shows the old version**: The workflow reads `apps/desktop/package.json`; use `./apps/desktop/create-release.sh` or bump that file first, merge it, then tag from `main`
 - **Linux auto-update not working**: Verify `release/*-linux.yml` is uploaded to the GitHub release
 - **Build icon warnings/failures**: Add icons under `src/resources/build/icons/` (`icon.icns`, `icon.ico`, optional Linux `.png`)
 - **Native module errors**: Ensure `node-pty` is in externals in both `electron.vite.config.ts` and `electron-builder.ts`

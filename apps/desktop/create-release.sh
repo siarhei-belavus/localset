@@ -44,6 +44,11 @@ error() {
 	exit 1
 }
 
+tag_exists_remote() {
+	local tag_name="$1"
+	git ls-remote --exit-code --tags origin "refs/tags/${tag_name}" >/dev/null 2>&1
+}
+
 increment_patch() {
 	local version="$1"
 	local major minor patch
@@ -178,7 +183,7 @@ fi
 REPO=$(get_repo_name)
 
 info "Syncing local main before the ${RELEASE_KIND} release..."
-git fetch origin --prune --tags
+git fetch origin --prune
 git switch main >/dev/null 2>&1 || git checkout main >/dev/null 2>&1
 git pull --ff-only origin main
 
@@ -194,7 +199,7 @@ info "Preparing ${RELEASE_KIND} desktop release ${VERSION}"
 echo ""
 
 info "Checking whether ${TAG_NAME} already exists..."
-if git rev-parse "${TAG_NAME}" >/dev/null 2>&1; then
+if git rev-parse "${TAG_NAME}" >/dev/null 2>&1 || tag_exists_remote "${TAG_NAME}"; then
 	echo ""
 	warn "Tag ${TAG_NAME} already exists."
 	if gh release view "${TAG_NAME}" --repo "${REPO}" >/dev/null 2>&1; then

@@ -23,6 +23,7 @@ export const env = createEnv({
 		STREAMS_URL: z.url().default("https://superset-stream.fly.dev"),
 		DESKTOP_UPDATER_BASE_URL: z.url().optional(),
 		DESKTOP_CANARY_UPDATER_BASE_URL: z.url().optional(),
+		DESKTOP_MAC_UPDATER_ENABLED: z.string().optional(),
 		DESKTOP_LOCAL_ONLY: z.string().optional(),
 	},
 
@@ -39,6 +40,7 @@ export const env = createEnv({
 		DESKTOP_UPDATER_BASE_URL: process.env.DESKTOP_UPDATER_BASE_URL,
 		DESKTOP_CANARY_UPDATER_BASE_URL:
 			process.env.DESKTOP_CANARY_UPDATER_BASE_URL,
+		DESKTOP_MAC_UPDATER_ENABLED: process.env.DESKTOP_MAC_UPDATER_ENABLED,
 		DESKTOP_LOCAL_ONLY: process.env.DESKTOP_LOCAL_ONLY,
 	},
 	emptyStringAsUndefined: true,

@@ -1,15 +1,19 @@
-import { COMPANY } from "@superset/shared/constants";
 import { Button } from "@superset/ui/button";
 import { toast } from "@superset/ui/sonner";
 import { HiMiniXMark } from "react-icons/hi2";
 import { electronTrpc } from "renderer/lib/electron-trpc";
-import { AUTO_UPDATE_STATUS } from "shared/auto-update";
+import {
+	AUTO_UPDATE_STATUS,
+	LATEST_RELEASE_URL,
+	RELEASES_URL,
+} from "shared/auto-update";
 
 interface UpdateToastProps {
 	toastId: string | number;
-	status: "downloading" | "ready" | "error";
+	status: "available" | "downloading" | "ready" | "error";
 	version?: string;
 	error?: string;
+	installMethod?: "auto" | "manual";
 }
 
 export function UpdateToast({
@@ -17,6 +21,7 @@ export function UpdateToast({
 	status,
 	version,
 	error,
+	installMethod,
 }: UpdateToastProps) {
 	const openUrl = electronTrpc.external.openUrl.useMutation();
 	const installMutation = electronTrpc.autoUpdate.install.useMutation();
@@ -26,16 +31,22 @@ export function UpdateToast({
 		},
 	});
 
+	const isAvailable = status === AUTO_UPDATE_STATUS.AVAILABLE;
 	const isDownloading = status === AUTO_UPDATE_STATUS.DOWNLOADING;
 	const isReady = status === AUTO_UPDATE_STATUS.READY;
 	const isError = status === AUTO_UPDATE_STATUS.ERROR;
+	const isManual = installMethod === "manual";
 
 	const handleSeeChanges = () => {
-		openUrl.mutate(COMPANY.CHANGELOG_URL);
+		openUrl.mutate(RELEASES_URL);
 	};
 
 	const handleInstall = () => {
 		installMutation.mutate();
+	};
+
+	const handleDownload = () => {
+		openUrl.mutate(LATEST_RELEASE_URL);
 	};
 
 	const handleLater = () => {
@@ -69,6 +80,18 @@ export function UpdateToast({
 							{version ? `Version ${version}` : "Please wait"}
 						</span>
 					</>
+				) : isAvailable ? (
+					<>
+						<span className="font-medium text-sm">Update available</span>
+						<span className="text-sm text-muted-foreground">
+							{version
+								? `Version ${version} is ready to download`
+								: "A new version is available"}
+						</span>
+						<span className="text-xs text-muted-foreground/70">
+							Unsigned macOS builds update manually from the latest release.
+						</span>
+					</>
 				) : (
 					<>
 						<span className="font-medium text-sm">Update available</span>
@@ -83,18 +106,24 @@ export function UpdateToast({
 					</>
 				)}
 			</div>
-			{isReady && (
+			{(isReady || isAvailable) && (
 				<div className="flex items-center gap-2">
 					<Button variant="ghost" size="sm" onClick={handleSeeChanges}>
-						See changes
+						See release
 					</Button>
-					<Button
-						size="sm"
-						onClick={handleInstall}
-						disabled={installMutation.isPending}
-					>
-						{installMutation.isPending ? "Installing..." : "Install"}
-					</Button>
+					{isManual ? (
+						<Button size="sm" onClick={handleDownload}>
+							Download latest
+						</Button>
+					) : (
+						<Button
+							size="sm"
+							onClick={handleInstall}
+							disabled={installMutation.isPending}
+						>
+							{installMutation.isPending ? "Installing..." : "Install"}
+						</Button>
+					)}
 				</div>
 			)}
 		</div>

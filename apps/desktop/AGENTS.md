@@ -1,4 +1,8 @@
 # Implementation details
+This desktop app is a `Localset` fork of Superset desktop intended for local-only solo development.
+Preserve the fork's local-first behavior: no telemetry, no external Superset-managed services, no cloud auth requirement, and no features that assume remote infrastructure unless the user explicitly requests them.
+When applying upstream desktop changes, prefer runtime stability, local workflows, and offline-safe behavior over cloud-connected product features.
+
 Use `apps/desktop/BUILDING.md` as the source of truth for desktop run/build commands and local dev environment setup.
 When asked to run the desktop app locally, prefer the documented development command from `apps/desktop/BUILDING.md`, including `SKIP_ENV_VALIDATION=1` and the isolated `SUPERSET_HOME_DIR`/`SUPERSET_WORKSPACE_NAME` settings for side-by-side local development.
 

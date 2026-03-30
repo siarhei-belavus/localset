@@ -81,8 +81,7 @@ read_package_version() {
 }
 
 get_repo_name() {
-	gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null ||
-		git remote get-url origin | sed 's/.*github.com[:/]\(.*\)\.git/\1/'
+	git remote get-url origin | sed 's/.*github.com[:/]\(.*\)\.git/\1/'
 }
 
 select_version() {
@@ -181,6 +180,7 @@ if [ "$SIGNED_RELEASE" = true ]; then
 fi
 
 REPO=$(get_repo_name)
+REPO_OWNER="${REPO%%/*}"
 
 info "Syncing local main before the ${RELEASE_KIND} release..."
 git fetch origin --prune
@@ -269,7 +269,7 @@ if [ "${CURRENT_VERSION}" != "${VERSION}" ]; then
 			--title "chore(desktop): bump version to ${VERSION}" \
 			--body "Bumps the Localset desktop app version to ${VERSION} before tagging the release." \
 			--base main \
-			--head "${RELEASE_BRANCH}" 2>&1)
+			--head "${REPO_OWNER}:${RELEASE_BRANCH}" 2>&1)
 		PR_CREATE_EXIT=$?
 		set -e
 

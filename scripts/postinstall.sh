@@ -19,5 +19,8 @@ if [ -n "$CI" ]; then
   exit 0
 fi
 
+# Install repo-managed git hooks for local development when available.
+./scripts/setup-git-hooks.sh
+
 # Install native dependencies for desktop app
 bun run --filter=@superset/desktop install:deps

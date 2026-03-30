@@ -62,6 +62,12 @@ Before distributing a forked build, update `apps/desktop/MODIFIED_BUILD_NOTICE.m
 - `desktop-signed-v<version>` triggers the signed macOS workflow for future use once Apple signing secrets are configured
 - `desktop-canary` remains the unsigned canary channel
 
+## macOS Auto-update Limitation
+
+Unsigned macOS desktop builds do not support in-app auto-update reliably. ShipIt / Squirrel.Mac validates the downloaded app bundle signature before swapping the app, so Localset's unsigned macOS channel should be treated as manual-update-only.
+
+If you want in-app auto-updates on macOS, publish from the signed `desktop-signed-v<version>` workflow instead of the unsigned `desktop-v<version>` workflow.
+
 ## Manual Release
 
 If you prefer not to use the script:

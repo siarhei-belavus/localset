@@ -37,6 +37,11 @@ on:
         required: false
         type: boolean
         default: false
+      mac_updater_enabled:
+        description: "Enable runtime auto-updates for macOS builds"
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   build-macos:
@@ -125,6 +130,7 @@ jobs:
             {
               echo "DESKTOP_UPDATER_GITHUB_OWNER=${{ github.repository_owner }}"
               echo "DESKTOP_UPDATER_GITHUB_REPO=${{ github.event.repository.name }}"
+              echo "DESKTOP_MAC_UPDATER_ENABLED=${{ inputs.mac_updater_enabled }}"
             } >> "$GITHUB_ENV"
             if [[ "${{ inputs.channel }}" == "canary" ]]; then
               {
@@ -143,6 +149,7 @@ jobs:
               echo "DESKTOP_CANARY_UPDATER_BASE_URL="
               echo "DESKTOP_UPDATER_GITHUB_OWNER="
               echo "DESKTOP_UPDATER_GITHUB_REPO="
+              echo "DESKTOP_MAC_UPDATER_ENABLED=false"
             } >> "$GITHUB_ENV"
           fi
 
@@ -290,6 +297,7 @@ jobs:
             {
               echo "DESKTOP_UPDATER_GITHUB_OWNER=${{ github.repository_owner }}"
               echo "DESKTOP_UPDATER_GITHUB_REPO=${{ github.event.repository.name }}"
+              echo "DESKTOP_MAC_UPDATER_ENABLED=${{ inputs.mac_updater_enabled }}"
             } >> "$GITHUB_ENV"
             if [[ "${{ inputs.channel }}" == "canary" ]]; then
               {
@@ -308,6 +316,7 @@ jobs:
               echo "DESKTOP_CANARY_UPDATER_BASE_URL="
               echo "DESKTOP_UPDATER_GITHUB_OWNER="
               echo "DESKTOP_UPDATER_GITHUB_REPO="
+              echo "DESKTOP_MAC_UPDATER_ENABLED=false"
             } >> "$GITHUB_ENV"
           fi
 

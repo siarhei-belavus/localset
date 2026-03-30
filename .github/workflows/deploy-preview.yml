@@ -23,6 +23,7 @@ env:
 jobs:
   deploy-database:
     name: Deploy Database (Neon)
+    if: github.repository == 'superset-sh/superset'
     runs-on: ubuntu-latest
     environment: preview
 
@@ -80,6 +81,7 @@ jobs:
 
   deploy-electric:
     name: Deploy Electric (Fly.io)
+    if: github.repository == 'superset-sh/superset'
     runs-on: ubuntu-latest
     needs: deploy-database
 
@@ -125,6 +127,7 @@ jobs:
 
   deploy-api:
     name: Deploy API
+    if: github.repository == 'superset-sh/superset'
     runs-on: ubuntu-latest
     environment: preview
     needs: deploy-database

@@ -2,7 +2,8 @@
 	"mcpServers": {
 		"superset": {
 			"type": "http",
-			"url": "https://api.superset.sh/api/agent/mcp"
+			"url": "https://api.superset.sh/api/agent/mcp",
+			"enabled": false
 		},
 		"expo-mcp": {
 			"type": "http",
@@ -11,27 +12,33 @@
 		},
 		"maestro": {
 			"command": "maestro",
-			"args": ["mcp"]
+			"args": ["mcp"],
+			"enabled": false
 		},
 		"neon": {
 			"type": "http",
-			"url": "https://mcp.neon.tech/mcp"
+			"url": "https://mcp.neon.tech/mcp",
+			"enabled": false
 		},
 		"linear": {
 			"type": "http",
-			"url": "https://mcp.linear.app/mcp"
+			"url": "https://mcp.linear.app/mcp",
+			"enabled": false
 		},
 		"sentry": {
 			"type": "http",
-			"url": "https://mcp.sentry.dev/mcp"
+			"url": "https://mcp.sentry.dev/mcp",
+			"enabled": false
 		},
 		"posthog": {
 			"type": "http",
-			"url": "https://mcp.posthog.com/mcp"
+			"url": "https://mcp.posthog.com/mcp",
+			"enabled": false
 		},
 		"desktop-automation": {
 			"command": "bun",
-			"args": ["run", "packages/desktop-mcp/src/bin.ts"]
+			"args": ["run", "packages/desktop-mcp/src/bin.ts"],
+			"enabled": false
 		}
 	}
 }

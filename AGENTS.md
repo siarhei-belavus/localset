@@ -2,6 +2,15 @@
 
 Guidelines for agents and developers working in this repository.
 
+## Fork Intent
+
+This repository is a downstream fork used for a local-only solo developer workflow.
+
+- Prefer local-first behavior over cloud-connected behavior.
+- Preserve the fork's removal or disabling of telemetry, analytics, hosted auth, and external Superset-managed services unless the user explicitly asks to restore them.
+- Treat changes that would reintroduce remote dependencies, background data egress, cloud sync, or mandatory online sign-in as high risk and confirm before making them.
+- When evaluating upstream changes, prefer stability, local UX, and self-contained workflows over features that assume Superset cloud infrastructure.
+
 ## Structure
 
 Bun + Turbo monorepo with:

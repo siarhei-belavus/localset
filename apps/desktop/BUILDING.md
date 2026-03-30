@@ -1,5 +1,38 @@
 # Development
 
+## Recommended Local Testing Workflow
+
+Use three separate lanes on macOS so your installed app, live dev session, and preview build do not fight over the same state:
+
+1. `Stable`: your normal installed `Localset.app` using the default home dir.
+2. `Dev`: live-reload development from the repo with an isolated home dir.
+3. `Preview`: a packaged `Localset Internal.app` launched with its own isolated home dir.
+
+From the repo root:
+
+```bash
+# Live development with isolated state under ~/.superset-dev
+bun run desktop:dev:isolated
+
+# Build a preview app with a separate app identity
+bun run desktop:package:internal
+
+# Launch the packaged preview app with isolated state under ~/.superset-preview
+bun run desktop:preview:internal
+```
+
+Default directories for the recommended workflow:
+
+- `Stable`: `~/.superset`
+- `Dev`: `~/.superset-dev`
+- `Preview`: `~/.superset-preview`
+
+Why this matters:
+
+- `SUPERSET_HOME_DIR` controls where local state, app state, hooks, sockets, and the local DB live.
+- `SUPERSET_WORKSPACE_NAME` affects instance isolation and protocol naming.
+- `Localset Internal.app` uses a distinct app identity, but you still need a separate `SUPERSET_HOME_DIR` to keep preview data isolated from your installed app.
+
 Run the dev server without env validation or auth:
 
 ```bash
@@ -23,6 +56,23 @@ bun run dev
 ```
 
 This keeps local dev state under `~/.superset-dev` instead of `~/.superset` and helps distinguish the dev app/workspace from the installed app.
+
+## Preview Build Testing
+
+To test a packaged build in parallel with your installed app on macOS:
+
+```bash
+bun run desktop:package:internal
+bun run desktop:preview:internal
+```
+
+The preview launcher:
+
+- looks for `Localset Internal.app` under `apps/desktop/release/`
+- defaults to `SUPERSET_HOME_DIR="$HOME/.superset-preview"`
+- defaults to `SUPERSET_WORKSPACE_NAME="preview"`
+
+You can override those env vars if you want multiple preview lanes.
 
 ## Modified Build Distribution
 

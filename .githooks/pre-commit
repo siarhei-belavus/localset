@@ -1,0 +1,6 @@
+#!/bin/bash
+
+set -euo pipefail
+
+echo "Running lint before commit..."
+bun run lint

@@ -1,11 +1,14 @@
-import { COMPANY } from "@superset/shared/constants";
 import { Button } from "@superset/ui/button";
 import { useState } from "react";
 import { HiArrowPath, HiExclamationTriangle } from "react-icons/hi2";
 import { electronTrpc } from "renderer/lib/electron-trpc";
 import { AppFrame } from "renderer/screens/main/components/AppFrame";
 import { Background } from "renderer/screens/main/components/Background";
-import { AUTO_UPDATE_STATUS, type AutoUpdateStatus } from "shared/auto-update";
+import {
+	AUTO_UPDATE_STATUS,
+	type AutoUpdateStatus,
+	LATEST_RELEASE_URL,
+} from "shared/auto-update";
 
 interface UpdateRequiredPageProps {
 	currentVersion: string;
@@ -26,20 +29,27 @@ export function UpdateRequiredPage({
 	const [updateStatus, setUpdateStatus] = useState<{
 		status: AutoUpdateStatus;
 		error?: string;
+		installMethod?: "auto" | "manual";
 	}>({ status: AUTO_UPDATE_STATUS.IDLE });
 
 	// Subscribe to auto-update status changes
 	electronTrpc.autoUpdate.subscribe.useSubscription(undefined, {
 		onData: (event) => {
-			setUpdateStatus({ status: event.status, error: event.error });
+			setUpdateStatus({
+				status: event.status,
+				error: event.error,
+				installMethod: event.installMethod,
+			});
 		},
 	});
 
 	const isChecking = updateStatus.status === AUTO_UPDATE_STATUS.CHECKING;
+	const isAvailable = updateStatus.status === AUTO_UPDATE_STATUS.AVAILABLE;
 	const isDownloading = updateStatus.status === AUTO_UPDATE_STATUS.DOWNLOADING;
 	const isReady = updateStatus.status === AUTO_UPDATE_STATUS.READY;
 	const isError = updateStatus.status === AUTO_UPDATE_STATUS.ERROR;
 	const isLoading = isChecking || isDownloading;
+	const isManual = updateStatus.installMethod === "manual";
 
 	const handleCheckForUpdate = () => {
 		checkMutation.mutate();
@@ -50,7 +60,7 @@ export function UpdateRequiredPage({
 	};
 
 	const handleDownloadManually = () => {
-		openUrl.mutate(COMPANY.CHANGELOG_URL);
+		openUrl.mutate(LATEST_RELEASE_URL);
 	};
 
 	return (
@@ -95,6 +105,8 @@ export function UpdateRequiredPage({
 									? "Installing..."
 									: "Install & Restart"}
 							</Button>
+						) : isAvailable && isManual ? (
+							<Button onClick={handleDownloadManually}>Download Latest</Button>
 						) : (
 							<Button
 								onClick={handleCheckForUpdate}

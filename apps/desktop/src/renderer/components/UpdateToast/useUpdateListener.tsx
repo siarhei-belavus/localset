@@ -19,6 +19,7 @@ export function useUpdateListener() {
 			}
 
 			if (
+				status === AUTO_UPDATE_STATUS.AVAILABLE ||
 				status === AUTO_UPDATE_STATUS.DOWNLOADING ||
 				status === AUTO_UPDATE_STATUS.READY ||
 				status === AUTO_UPDATE_STATUS.ERROR
@@ -30,6 +31,7 @@ export function useUpdateListener() {
 							status={status}
 							version={version}
 							error={error}
+							installMethod={event.installMethod}
 						/>
 					),
 					{

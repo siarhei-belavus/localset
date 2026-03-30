@@ -1,10 +1,14 @@
 import { EventEmitter } from "node:events";
-import { app, dialog } from "electron";
+import { app, dialog, shell } from "electron";
 import { autoUpdater } from "electron-updater";
 import { env } from "main/env.main";
 import { setSkipQuitConfirmation } from "main/index";
 import { prerelease } from "semver";
-import { AUTO_UPDATE_STATUS, type AutoUpdateStatus } from "shared/auto-update";
+import {
+	AUTO_UPDATE_STATUS,
+	type AutoUpdateStatus,
+	LATEST_RELEASE_URL,
+} from "shared/auto-update";
 import { PLATFORM } from "shared/constants";
 import { DESKTOP_DISTRIBUTION } from "shared/desktop-distribution";
 
@@ -22,7 +26,13 @@ function isPrereleaseBuild(): boolean {
 }
 
 const IS_PRERELEASE = isPrereleaseBuild();
-const IS_AUTO_UPDATE_PLATFORM = PLATFORM.IS_MAC || PLATFORM.IS_LINUX;
+const IS_MAC_AUTO_UPDATE_ENABLED =
+	env.DESKTOP_MAC_UPDATER_ENABLED === "1" ||
+	env.DESKTOP_MAC_UPDATER_ENABLED === "true";
+const IS_UPDATE_CHECK_PLATFORM = PLATFORM.IS_MAC || PLATFORM.IS_LINUX;
+const IS_IN_APP_INSTALL_ENABLED =
+	PLATFORM.IS_LINUX || (PLATFORM.IS_MAC && IS_MAC_AUTO_UPDATE_ENABLED);
+const IS_MANUAL_UPDATE_ONLY = PLATFORM.IS_MAC && !IS_MAC_AUTO_UPDATE_ENABLED;
 
 const STABLE_UPDATE_FEED_URL = env.DESKTOP_UPDATER_BASE_URL ?? null;
 const PRERELEASE_UPDATE_FEED_URL =
@@ -35,6 +45,7 @@ export interface AutoUpdateStatusEvent {
 	status: AutoUpdateStatus;
 	version?: string;
 	error?: string;
+	installMethod?: "auto" | "manual";
 }
 
 export const autoUpdateEmitter = new EventEmitter();
@@ -61,31 +72,55 @@ function isNetworkError(error: Error | string): boolean {
 
 let currentStatus: AutoUpdateStatus = AUTO_UPDATE_STATUS.IDLE;
 let currentVersion: string | undefined;
+let currentInstallMethod: "auto" | "manual" | undefined;
 let isDismissed = false;
 
 function emitStatus(
 	status: AutoUpdateStatus,
 	version?: string,
 	error?: string,
+	installMethod?: "auto" | "manual",
 ): void {
 	currentStatus = status;
 	currentVersion = version;
+	currentInstallMethod = installMethod;
 
-	if (isDismissed && status === AUTO_UPDATE_STATUS.READY) {
+	if (
+		isDismissed &&
+		(status === AUTO_UPDATE_STATUS.READY ||
+			status === AUTO_UPDATE_STATUS.AVAILABLE)
+	) {
 		return;
 	}
 
-	autoUpdateEmitter.emit("status-changed", { status, version, error });
+	autoUpdateEmitter.emit("status-changed", {
+		status,
+		version,
+		error,
+		installMethod,
+	});
 }
 
 export function getUpdateStatus(): AutoUpdateStatusEvent {
-	if (isDismissed && currentStatus === AUTO_UPDATE_STATUS.READY) {
+	if (
+		isDismissed &&
+		(currentStatus === AUTO_UPDATE_STATUS.READY ||
+			currentStatus === AUTO_UPDATE_STATUS.AVAILABLE)
+	) {
 		return { status: AUTO_UPDATE_STATUS.IDLE };
 	}
-	return { status: currentStatus, version: currentVersion };
+	return {
+		status: currentStatus,
+		version: currentVersion,
+		installMethod: currentInstallMethod,
+	};
 }
 
 export function installUpdate(): void {
+	if (IS_MANUAL_UPDATE_ONLY) {
+		void shell.openExternal(LATEST_RELEASE_URL);
+		return;
+	}
 	if (env.NODE_ENV === "development") {
 		console.info("[auto-updater] Install skipped in dev mode");
 		emitStatus(AUTO_UPDATE_STATUS.IDLE);
@@ -102,7 +137,7 @@ export function dismissUpdate(): void {
 }
 
 export function checkForUpdates(): void {
-	if (env.NODE_ENV === "development" || !IS_AUTO_UPDATE_PLATFORM) {
+	if (env.NODE_ENV === "development" || !IS_UPDATE_CHECK_PLATFORM) {
 		return;
 	}
 	isDismissed = false;
@@ -127,7 +162,7 @@ export function checkForUpdatesInteractive(): void {
 		});
 		return;
 	}
-	if (!IS_AUTO_UPDATE_PLATFORM) {
+	if (!IS_UPDATE_CHECK_PLATFORM) {
 		dialog.showMessageBox({
 			type: "info",
 			title: "Updates",
@@ -212,12 +247,20 @@ export function simulateError(): void {
 export function setupAutoUpdater(): void {
 	if (
 		env.NODE_ENV === "development" ||
-		!IS_AUTO_UPDATE_PLATFORM ||
+		!IS_UPDATE_CHECK_PLATFORM ||
 		!UPDATE_FEED_URL
 	) {
 		if (
 			env.NODE_ENV !== "development" &&
-			IS_AUTO_UPDATE_PLATFORM &&
+			PLATFORM.IS_MAC &&
+			!IS_MAC_AUTO_UPDATE_ENABLED
+		) {
+			console.info(
+				`[auto-updater] Running in manual macOS update mode for unsigned ${DESKTOP_DISTRIBUTION.productName} build`,
+			);
+		} else if (
+			env.NODE_ENV !== "development" &&
+			IS_UPDATE_CHECK_PLATFORM &&
 			!UPDATE_FEED_URL
 		) {
 			console.info(
@@ -227,8 +270,8 @@ export function setupAutoUpdater(): void {
 		return;
 	}
 
-	autoUpdater.autoDownload = true;
-	autoUpdater.autoInstallOnAppQuit = true;
+	autoUpdater.autoDownload = IS_IN_APP_INSTALL_ENABLED;
+	autoUpdater.autoInstallOnAppQuit = IS_IN_APP_INSTALL_ENABLED;
 	autoUpdater.disableDifferentialDownload = true;
 
 	// Allow downgrade for prerelease builds so users can switch back to stable
@@ -242,7 +285,7 @@ export function setupAutoUpdater(): void {
 	});
 
 	console.info(
-		`[auto-updater] Initialized: version=${app.getVersion()}, channel=${IS_PRERELEASE ? "canary" : "stable"}, feedURL=${UPDATE_FEED_URL}`,
+		`[auto-updater] Initialized: version=${app.getVersion()}, channel=${IS_PRERELEASE ? "canary" : "stable"}, feedURL=${UPDATE_FEED_URL}, installMode=${IS_IN_APP_INSTALL_ENABLED ? "auto" : "manual"}`,
 	);
 
 	autoUpdater.on("error", (error) => {
@@ -269,14 +312,21 @@ export function setupAutoUpdater(): void {
 		console.info(
 			`[auto-updater] Update available: ${app.getVersion()} → ${info.version} (files: ${info.files?.map((f: { url: string }) => f.url).join(", ")})`,
 		);
-		emitStatus(AUTO_UPDATE_STATUS.DOWNLOADING, info.version);
+		emitStatus(
+			IS_IN_APP_INSTALL_ENABLED
+				? AUTO_UPDATE_STATUS.DOWNLOADING
+				: AUTO_UPDATE_STATUS.AVAILABLE,
+			info.version,
+			undefined,
+			IS_IN_APP_INSTALL_ENABLED ? "auto" : "manual",
+		);
 	});
 
 	autoUpdater.on("update-not-available", (info) => {
 		console.info(
 			`[auto-updater] No updates available (currentVersion=${app.getVersion()}, latestVersion=${info.version})`,
 		);
-		emitStatus(AUTO_UPDATE_STATUS.IDLE);
+		emitStatus(AUTO_UPDATE_STATUS.IDLE, info.version);
 	});
 
 	autoUpdater.on("download-progress", (progress) => {
@@ -289,7 +339,7 @@ export function setupAutoUpdater(): void {
 		console.info(
 			`[auto-updater] Update downloaded: ${app.getVersion()} → ${info.version}. Ready to install.`,
 		);
-		emitStatus(AUTO_UPDATE_STATUS.READY, info.version);
+		emitStatus(AUTO_UPDATE_STATUS.READY, info.version, undefined, "auto");
 	});
 
 	const interval = setInterval(checkForUpdates, UPDATE_CHECK_INTERVAL_MS);

@@ -24,6 +24,7 @@ jobs:
       artifact_retention_days: 30
       local_only: true
       updater_enabled: true
+      mac_updater_enabled: true
     secrets: inherit
 
   release:

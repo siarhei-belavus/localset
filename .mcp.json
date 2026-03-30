@@ -1,44 +1,44 @@
 {
-  "mcpServers": {
-    "superset": {
-      "type": "http",
-      "url": "https://api.superset.sh/api/agent/mcp",
-      "enabled": false
-    },
-    "expo-mcp": {
-      "type": "http",
-      "url": "https://mcp.expo.dev/mcp",
-      "enabled": false
-    },
-    "maestro": {
-      "command": "maestro",
-      "args": ["mcp"],
-      "enabled": false
-    },
-    "neon": {
-      "type": "http",
-      "url": "https://mcp.neon.tech/mcp",
-      "enabled": false
-    },
-    "linear": {
-      "type": "http",
-      "url": "https://mcp.linear.app/mcp",
-      "enabled": false
-    },
-    "sentry": {
-      "type": "http",
-      "url": "https://mcp.sentry.dev/mcp",
-      "enabled": false
-    },
-    "posthog": {
-      "type": "http",
-      "url": "https://mcp.posthog.com/mcp",
-      "enabled": false
-    },
-    "desktop-automation": {
-      "command": "bun",
-      "args": ["run", "packages/desktop-mcp/src/bin.ts"],
-      "enabled": false
-    }
-  }
+	"mcpServers": {
+		"superset": {
+			"type": "http",
+			"url": "https://api.superset.sh/api/agent/mcp",
+			"enabled": false
+		},
+		"expo-mcp": {
+			"type": "http",
+			"url": "https://mcp.expo.dev/mcp",
+			"enabled": false
+		},
+		"maestro": {
+			"command": "maestro",
+			"args": ["mcp"],
+			"enabled": false
+		},
+		"neon": {
+			"type": "http",
+			"url": "https://mcp.neon.tech/mcp",
+			"enabled": false
+		},
+		"linear": {
+			"type": "http",
+			"url": "https://mcp.linear.app/mcp",
+			"enabled": false
+		},
+		"sentry": {
+			"type": "http",
+			"url": "https://mcp.sentry.dev/mcp",
+			"enabled": false
+		},
+		"posthog": {
+			"type": "http",
+			"url": "https://mcp.posthog.com/mcp",
+			"enabled": false
+		},
+		"desktop-automation": {
+			"command": "bun",
+			"args": ["run", "packages/desktop-mcp/src/bin.ts"],
+			"enabled": false
+		}
+	}
 }

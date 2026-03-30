@@ -6,8 +6,8 @@ import { AppFrame } from "renderer/screens/main/components/AppFrame";
 import { Background } from "renderer/screens/main/components/Background";
 import {
 	AUTO_UPDATE_STATUS,
-	LATEST_RELEASE_URL,
 	type AutoUpdateStatus,
+	LATEST_RELEASE_URL,
 } from "shared/auto-update";
 
 interface UpdateRequiredPageProps {
@@ -106,9 +106,7 @@ export function UpdateRequiredPage({
 									: "Install & Restart"}
 							</Button>
 						) : isAvailable && isManual ? (
-							<Button onClick={handleDownloadManually}>
-								Download Latest
-							</Button>
+							<Button onClick={handleDownloadManually}>Download Latest</Button>
 						) : (
 							<Button
 								onClick={handleCheckForUpdate}

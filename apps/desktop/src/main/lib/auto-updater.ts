@@ -6,8 +6,8 @@ import { setSkipQuitConfirmation } from "main/index";
 import { prerelease } from "semver";
 import {
 	AUTO_UPDATE_STATUS,
-	LATEST_RELEASE_URL,
 	type AutoUpdateStatus,
+	LATEST_RELEASE_URL,
 } from "shared/auto-update";
 import { PLATFORM } from "shared/constants";
 import { DESKTOP_DISTRIBUTION } from "shared/desktop-distribution";
